@@ -28,33 +28,66 @@ class BitfieldMember(object):
 
     # see https://github.com/niftools/nifxml/issues/76 for reference
     def __get__(self, instance, owner):
-        return self.return_type((instance.value & self.mask) >> self.pos)
+        return self.return_type((instance._value & self.mask) >> self.pos)
 
     def __set__(self, instance, value):
         print(f"setting bitfield value {value}")
-        print("before:", instance.value, bin(instance.value))
-        instance.value = instance.value & ~self.mask
-        instance.value |= (value << self.pos) & self.mask
-        print("after:", instance.value, bin(instance.value))
+        # print("before:", instance._value, bin(instance._value))
+
+        # Clear the current value
+        instance._value = instance._value & ~self.mask
+        # Update with the new value
+        instance._value |= (value << self.pos) & self.mask
+        # print("after:", instance.value, bin(instance.value))
 
 
 class BasicBitfield(int):
-    value: int = 0
+    _value: int = 0
     alpha_blend = BitfieldMember(0, 1, 0x0001, int)
     src_blend = BitfieldMember(1, 4, 0x001E, AlphaFunction)
 
-    def __init__(self):
-        self.value = 0
-        self.alpha_blend = 1
-        self.src_blend = AlphaFunction.SRC_ALPHA
+    def __new__(cls, *args, **kwargs):
+        return super(BasicBitfield, cls).__new__(cls)
+
+    def __add__(self, other):
+        self._value += other
+        return self
+
+    def __sub__(self, other):
+        self._value -= other
+        return self
+
+    def __mul__(self, other):
+        self._value *= other
+        return self
+
+    def __floordiv__(self, other):
+        self._value //= other
+        return self
+
+    def __truediv__(self, other):
+        self._value /= other
+        return self
+
+    def __init__(self, value=None):
+        super().__init__()
+        if value is not None:
+            self._value = value
+        else:
+            self._value = 0
+            self.alpha_blend = 1
+            self.src_blend = AlphaFunction.SRC_ALPHA
 
     def __repr__(self):
         return self.__str__
 
     def __str__(self):
         CALLABLES = types.FunctionType, types.MethodType
-        print([key for key, value in self.__dict__.items() if not isinstance(value, CALLABLES)])
-        info = str(vars(self))
+        fields = [key for key, value in self.__class__.__dict__.items() if not isinstance(value, CALLABLES) and not key.startswith("_")]
+        info = f"<Bitfield> {self.__class__.__name__}: {self._value}, {bin(self._value)}"
+        for field in fields:
+            val = getattr(self, field)
+            info += f"\n\t{field} = {str(val)}"
         return info
 
 # AlphaFunction(1)
@@ -66,7 +99,25 @@ print(AlphaFunction.INV_DEST_ALPHA.value)
 # print("alpha_blend", temp.alpha_blend, temp.value, bin(temp.value))
 #
 # print(temp)
-print("src_blend", temp.src_blend, temp.value, bin(temp.value))
+print("src_blend", temp.src_blend, temp._value, bin(temp._value))
 temp.src_blend = AlphaFunction.INV_DEST_ALPHA
-print("src_blend", temp.src_blend, temp.value, bin(temp.value))
+print("src_blend", temp.src_blend, temp._value, bin(temp._value))
+temp.src_blend &= 0
+print("src_blend", temp.src_blend, temp._value, bin(temp._value))
 # print("src_blend", temp.src_blend, temp.value, bin(temp.value))
+temp += 3
+print(temp)
+temp = temp + 1
+print(temp)
+temp = temp +3
+print(temp)
+temp -= 2
+print(temp)
+temp *= 2
+print(temp)
+temp = temp // 4
+print(temp)
+
+
+temp2 = BasicBitfield(2)
+print(temp2)

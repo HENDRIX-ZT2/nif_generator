@@ -101,8 +101,8 @@ class XmlParser:
                     self.read_struct(child)
                 # elif child.tag in self.bitstruct_types:
                 #     self.read_bitstruct(child)
-                # elif child.tag == "basic":
-                #     self.read_basic(child)
+                elif child.tag == "basic":
+                    self.write_basic(child)
                 # elif child.tag == "alias":
                 #     self.read_alias(child)
                 elif child.tag == "enum":
@@ -138,71 +138,7 @@ class XmlParser:
         self.cls.versions[self.version_string] = self.cls.version_number(self.version_string)
         self.update_gamesdict(self.cls.games, version.text)
         self.version_string = None
-    
-    def read_module(self, module):
-        """Reads a xml <module> block"""
-        # no children, not interesting for now
-        pass
 
-    def read_basic(self, basic):
-        """Maps to a type defined in self.cls"""
-        self.class_name = basic.attrib["name"]
-        # Each basic type corresponds to a type defined in C{self.cls}.
-        # The link between basic types and C{self.cls} types is done via the name of the class.
-        basic_class = getattr(self.cls, self.class_name)
-        # check the class variables
-        is_template = self.is_generic(basic.attrib)
-        # if basic_class._is_template != is_template:
-        #     raise XmlError( 'class %s should have _is_template = %s' % (self.class_name, is_template))
-
-        # link class cls.<class_name> to basic_class
-        setattr(self.cls, self.class_name, basic_class)
-    
-    # the following constructs create classes
-    def read_bitstruct(self, bitstruct):
-        """Create a bitstruct class"""
-        attrs = self.replace_tokens(bitstruct.attrib)
-        self.base_class = BitStructBase
-        self.update_class_dict(attrs, bitstruct.text)
-        try:
-            numbytes = int(attrs["numbytes"])
-        except KeyError:
-            # niftools style: storage attribute
-            numbytes = getattr(self.cls, attrs["storage"]).get_size()
-        self.class_dict["_attrs"] = []
-        self.class_dict["_numbytes"] = numbytes
-        for member in bitstruct:
-            attrs = self.replace_tokens(member.attrib)
-            if member.tag == "bits":
-                # eg. <bits name="Has Folder Records" numbits="1" default="1" />
-                # mandatory parameters
-                bit_attrs = attrs
-            elif member.tag == "option":
-                # niftools compatibility, we have a bitflags field
-                # so convert value into numbits
-                # first, calculate current bit position
-                bitpos = sum(bitattr.numbits for bitattr in self.class_dict["_attrs"])
-                # avoid crash
-                if "value" in attrs:
-                    # check if extra bits must be inserted
-                    numextrabits = int(attrs["value"]) - bitpos
-                    if numextrabits < 0:
-                        raise XmlError("values of bitflags must be increasing")
-                    if numextrabits > 0:
-                        reserved = dict(name="Reserved Bits %i"% len(self.class_dict["_attrs"]), numbits=numextrabits)
-                        self.class_dict["_attrs"].append( BitStructAttribute( self.cls, reserved))
-                # add the actual attribute
-                bit_attrs = dict(name=attrs["name"], numbits=1)
-            # new nif xml    
-            elif member.tag == "member":
-                bit_attrs = dict(name=attrs["name"], numbits=attrs["width"])
-            else:
-                raise XmlError("only bits tags allowed in struct type declaration")
-            
-            self.class_dict["_attrs"].append( BitStructAttribute(self.cls, bit_attrs) )
-            self.update_doc(self.class_dict["_attrs"][-1].doc, member.text)
-
-        self.create_class(bitstruct.tag)
 
     def clean_comment_str(self, comment_str, indent=""):
         """Reformats an XML comment string into multi-line a python style comment block"""
@@ -255,20 +191,12 @@ class XmlParser:
         # import parent class
         if class_basename:
             imports.append(class_basename)
-        # import classes used in the fields
-        for field in struct:
-            if field.tag in ("add", "field"):
-                field_type = convention.name_class(field.attrib["type"])
-                if field_type not in imports:
-                    imports.append(field_type)
+
+        self.collect_types(imports, struct)
 
         # write to python file
         with open(out_file, "w") as f:
-            for class_import in imports:
-                if class_import in self.path_dict:
-                    f.write(f"from .{self.path_dict[class_import]} import {class_import}\n")
-                else:
-                    f.write(f"import {class_import}\n")
+            self.write_imports(f, imports)
 
             if imports:
                 f.write("\n\n")
@@ -369,6 +297,37 @@ class XmlParser:
                         else:
                             f.write(f"{indent}self.{field_name} = {field_type}().{method_type}(stream)")
 
+    def collect_types(self, imports, struct):
+        """Iterate over all fields in struct and collect type references"""
+        # import classes used in the fields
+        for field in struct:
+            if field.tag in ("add", "field", "member"):
+                field_type = convention.name_class(field.attrib["type"])
+                if field_type not in imports:
+                    imports.append(field_type)
+
+    def write_imports(self, f, imports):
+        for class_import in imports:
+            if class_import in self.path_dict:
+                import_path = "generated."+self.path_dict[class_import].replace("\\", ".")
+                f.write(f"from {import_path} import {class_import}\n")
+            else:
+                f.write(f"import {class_import}\n")
+
+    def write_basic(self, element: ElementTree.Element):
+        class_name = convention.name_class(element.attrib['name'])
+        if element.attrib.get('integral', 'false') == 'true' and (
+                element.attrib.get('boolean', 'false') == 'false' or element.attrib['name'] == 'byte'):
+            size: int = int(element.attrib.get('size', '4'))
+            signed: bool = element.attrib.get('countable', 'true') == 'true'
+            min_value: str = hex(not signed and -pow(2, size * 4) or 0)
+            max_value: str = hex(pow(2, size * (not signed and 8 or 4)) - 1)
+            out_file = os.path.join(os.getcwd(), "generated", self.path_dict[class_name]+".py")
+            write_file(out_file,
+                env.get_template('basic_integral.py.jinja').render(
+                    basic=element, min=min_value, max=max_value, size=size)
+            )
+            # basics.append(element.attrib['name'])
 
     def write_bitflags(self, element: ElementTree.Element):
         class_name = convention.name_class(element.attrib['name'])
