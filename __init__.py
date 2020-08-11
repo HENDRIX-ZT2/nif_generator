@@ -4,6 +4,7 @@ import re
 import types
 import os
 import sys
+from distutils.dir_util import copy_tree
 import collections
 import xml.etree.ElementTree as ET
 import os, filters
@@ -70,6 +71,7 @@ class XmlParser:
         self.path_dict = {}
         # maps each type to its member tag type
         self.tag_dict = {}
+        self.copy_src_to_generated()
 
     def generate_module_paths(self, root):
         """preprocessing - generate module paths for imports relative to the output dir"""
@@ -85,6 +87,27 @@ class XmlParser:
                 self.path_dict[class_name] = os.path.join(*out_segments)
                 self.tag_dict[class_name] = child.tag
         # print(self.path_dict)
+        # source_dir = os.path.join(os.getcwd(),"source")
+        # for file in os.listdir(source_dir):
+        #     f, ext = os.path.splitext(file)
+        #     if ext:
+        #         self.path_dict[class_name] = os.path.join(source_dir, f)
+
+        self.path_dict["BasicBitfield"] = "bitfield"
+        self.path_dict["BitfieldMember"] = "bitfield"
+
+    def copy_src_to_generated(self):
+        """copies the files from the source folder to the generated folder"""
+        cwd = os.getcwd()
+        src_dir = os.path.join(cwd, "source")
+        trg_dir = os.path.join(cwd, "generated")
+        # # todo - use walk instead?
+        # for file in os.listdir(src_dir):
+        #     if file.endswith(".py"):
+        #         src_path = os.path.join(cwd, src_dir, file)
+        #         trg_path = os.path.join(cwd, trg_dir, file)
+        #         shutil.copyfile(src_path, trg_path)
+        copy_tree(src_dir, trg_dir)
 
     def load_xml(self, xml_file):
         """Loads an XML (can be filepath or open file) and does all parsing
@@ -103,8 +126,6 @@ class XmlParser:
                 #     self.read_bitstruct(child)
                 elif child.tag == "basic":
                     self.write_basic(child)
-                # elif child.tag == "alias":
-                #     self.read_alias(child)
                 elif child.tag == "enum":
                     self.write_enum(child)
                 elif child.tag == "bitfield":
@@ -147,19 +168,22 @@ class XmlParser:
         lines = [f"\n{indent}# {line.strip()}" for line in comment_str.strip().split("\n")]
         return "\n" + "".join(lines)
 
-    def read_struct(self, struct):
-        """Create a struct class"""
-        attrs = self.replace_tokens(struct.attrib)
-        # self.update_class_dict(attrs, struct.text)
+    def get_names(self, struct, attrs):
         # struct types can be organized in a hierarchy
         # if inherit attribute is defined, look for corresponding base block
         class_name = convention.name_class(attrs.get("name"))
         class_basename = attrs.get("inherit")
-        class_debug_str = self.clean_comment_str(struct.text)
+        class_debug_str = self.clean_comment_str(struct.text, indent="\t")
         if class_basename:
             # avoid turning None into 'None' if class doesn't inherit
             class_basename = convention.name_class(class_basename)
             logging.debug(f"Struct {class_name} is based on {class_basename}")
+        return class_name, class_basename, class_debug_str
+
+    def read_struct(self, struct):
+        """Create a struct class"""
+        attrs = self.replace_tokens(struct.attrib)
+        class_name, class_basename, class_debug_str = self.get_names(struct, attrs)
 
         # generate paths
         # get the module path from the path of the file
@@ -335,24 +359,49 @@ class XmlParser:
         write_file(out_file, env.get_template('bitflags.py.jinja').render(bitflags=element))
 
     def write_bitfield(self, element: ElementTree.Element):
-        class_name = convention.name_class(element.attrib['name'])
+        class_name, class_basename, class_debug_str = self.get_names(element, element.attrib)
         out_file = os.path.join(os.getcwd(), "generated", self.path_dict[class_name]+".py")
-        write_file(out_file, env.get_template('bitfield.py.jinja').render(bitfield=element))
+        # write_file(out_file, env.get_template('bitfield.py.jinja').render(bitfield=element))
+
+        imports = ["BasicBitfield", "BitfieldMember"]
+        self.collect_types(imports, element)
+
+        # write to python file
+        with open(out_file, "w") as f:
+            self.write_imports(f, imports)
+
+            if imports:
+                f.write("\n\n")
+            f.write(f"class {class_name}(BasicBitfield):")
+            if class_debug_str:
+                f.write(class_debug_str)
+
+            for field in element:
+                field_attrs = self.replace_tokens(field.attrib)
+                field_name = convention.name_attribute(field_attrs["name"])
+                field_type = convention.name_class(field_attrs["type"])
+                f.write(f"\n\t{field_name} = BitfieldMember(pos={field_attrs['pos']}, mask={field_attrs['mask']}, return_type={field_type})")
+
+            f.write("\n\n\tdef set_defaults(self):")
+            for field in element:
+                field_attrs = self.replace_tokens(field.attrib)
+                field_name = convention.name_attribute(field_attrs["name"])
+                field_type = convention.name_class(field_attrs["type"])
+                field_default = field_attrs.get("default")
+                # write the field's default, if it exists
+                if field_default:
+                    # we have to check if the default is an enum default value, in which case it has to be a member of that enum
+                    if self.tag_dict[field_type] == "enum":
+                        field_default = field_type+"."+field_default
+                    f.write(f"\n\t\tself.{field_name} = {field_default}")
+            f.write("\n")
+
+
 
     def write_enum(self, element: ElementTree.Element):
         class_name = convention.name_class(element.attrib['name'])
         out_file = os.path.join(os.getcwd(), "generated", self.path_dict[class_name]+".py")
         write_file(out_file, env.get_template('enum.py.jinja').render(enum=element))
-
-    def read_alias(self, alias):
-        """Create an alias class, ie. one that gives access to another class"""
-        self.update_class_dict(alias.attrib, alias.text)
-        typename = alias.attrib["type"]
-        try:
-            self.base_class = getattr(self.cls, typename)
-        except AttributeError:
-            raise XmlError("typo, or forward declaration of type %s" % typename)
-        self.create_class(alias.tag)
 
 
     # the following are helper functions

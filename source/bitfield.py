@@ -2,22 +2,6 @@ from enum import IntEnum
 import types
 
 
-class AlphaFunction(IntEnum):
-    """Describes alpha blend modes for NiAlphaProperty."""
-
-    ONE = 0
-    ZERO = 1
-    SRC_COLOR = 2
-    INV_SRC_COLOR = 3
-    DEST_COLOR = 4
-    INV_DEST_COLOR = 5
-    SRC_ALPHA = 6
-    INV_SRC_ALPHA = 7
-    DEST_ALPHA = 8
-    INV_DEST_ALPHA = 9
-    SRC_ALPHA_SATURATE = 10
-
-
 class BitfieldMember(object):
 
     def __init__(self, pos=0, width=0, mask=0, return_type=bool):
@@ -31,20 +15,18 @@ class BitfieldMember(object):
         return self.return_type((instance._value & self.mask) >> self.pos)
 
     def __set__(self, instance, value):
-        print(f"setting bitfield value {value}")
-        # print("before:", instance._value, bin(instance._value))
-
         # Clear the current value
         instance._value = instance._value & ~self.mask
         # Update with the new value
         instance._value |= (value << self.pos) & self.mask
-        # print("after:", instance.value, bin(instance.value))
 
 
 class BasicBitfield(int):
     _value: int = 0
-    alpha_blend = BitfieldMember(0, 1, 0x0001, int)
-    src_blend = BitfieldMember(1, 4, 0x001E, AlphaFunction)
+
+    def set_defaults(self):
+        """This function has to be overwritten by concrete implementations to set defaults for the bitfield."""
+        raise NotImplementedError
 
     def __new__(cls, *args, **kwargs):
         return super(BasicBitfield, cls).__new__(cls)
@@ -75,8 +57,7 @@ class BasicBitfield(int):
             self._value = value
         else:
             self._value = 0
-            self.alpha_blend = 1
-            self.src_blend = AlphaFunction.SRC_ALPHA
+            self.set_defaults()
 
     def __repr__(self):
         return self.__str__
@@ -90,8 +71,33 @@ class BasicBitfield(int):
             info += f"\n\t{field} = {str(val)}"
         return info
 
+
+class AlphaFunction(IntEnum):
+    """Describes alpha blend modes for NiAlphaProperty."""
+
+    ONE = 0
+    ZERO = 1
+    SRC_COLOR = 2
+    INV_SRC_COLOR = 3
+    DEST_COLOR = 4
+    INV_DEST_COLOR = 5
+    SRC_ALPHA = 6
+    INV_SRC_ALPHA = 7
+    DEST_ALPHA = 8
+    INV_DEST_ALPHA = 9
+    SRC_ALPHA_SATURATE = 10
+
+
+class AlphaFlags(BasicBitfield):
+    alpha_blend = BitfieldMember(0, 1, 0x0001, int)
+    src_blend = BitfieldMember(1, 4, 0x001E, AlphaFunction)
+
+    def set_defaults(self):
+        self.alpha_blend = 1
+        self.src_blend = AlphaFunction.SRC_ALPHA
+
 # AlphaFunction(1)
-temp = BasicBitfield()
+temp = AlphaFlags()
 print(AlphaFunction.INV_DEST_ALPHA.value)
 # # temp.value = 0
 # print("alpha_blend", temp.alpha_blend, temp.value, bin(temp.value))
@@ -120,4 +126,5 @@ print(temp)
 
 
 temp2 = BasicBitfield(2)
+# temp3 = BasicBitfield()
 print(temp2)

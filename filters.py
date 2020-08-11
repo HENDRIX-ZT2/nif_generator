@@ -41,38 +41,38 @@ def to_basic_type(type: str) -> str:
     # Temporary, these would likely be patched via a preprocessor
     if type is not None:
         if type == 'ulittle32':
-            return 'basics.ulittle32'
+            return 'basic.ulittle32'
         if type == 'int':
-            return 'basics.int'
+            return 'basic.int'
         if type == 'uint':
-            return 'basics.uint'
+            return 'basic.uint'
         if type == 'uint64':
-            return 'basics.int64'
+            return 'basic.int64'
         if type == 'uint':
-            return 'basics.uint64'
+            return 'basic.uint64'
         if type == 'byte':
-            return 'basics.byte'
+            return 'basic.byte'
         if type == 'char':
-            return 'basics.char'
+            return 'basic.char'
         if type == 'short':
-            return 'basics.short'
+            return 'basic.short'
         if type == 'ushort':
-            return 'basics.ushort'
+            return 'basic.ushort'
         if type == 'float':
-            return 'basics.float'
+            return 'basic.float'
         if type == 'BlockTypeIndex':
-            return 'basics.BlockTypeIndex'
+            return 'basic.BlockTypeIndex'
         if type == 'StringIndex':
-            return 'basics.StringIndex'
+            return 'basic.StringIndex'
         if type == 'StringOffset':
-            return 'basics.StringOffset'
+            return 'basic.StringOffset'
         if type == 'FileVersion':
-            return 'basics.FileVersion'
+            return 'basic.FileVersion'
         if type == 'NiFixedString':
-            return 'basics.NiFixedString'
+            return 'basic.NiFixedString'
         if type == 'Ref':
-            return 'basics.Ref'
+            return 'basic.Ref'
         if type == 'Ptr':
-            return 'basics.Ptr'
+            return 'basic.Ptr'
 
     return type
