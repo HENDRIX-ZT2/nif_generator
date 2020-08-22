@@ -15,6 +15,7 @@ from xml.etree import ElementTree
 from html import unescape
 
 import naming_conventions as convention
+from expression import Expression, Version
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -122,6 +123,7 @@ class XmlParser:
             try:
                 if child.tag in self.struct_types:
                     # StructWriter(child)
+                    # if child.attrib["name"] == "NiAVObject":
                     self.read_struct(child)
                 # elif child.tag in self.bitstruct_types:
                 #     self.read_bitstruct(child)
@@ -227,12 +229,14 @@ class XmlParser:
         with open(out_file, "w") as f:
             self.write_imports(f, imports)
 
+            f.write(f"\nglobal version")
+            f.write(f"\nglobal bs_header\n")
+
             if imports:
                 f.write("\n\n")
-            if class_basename:
-                f.write(f"class {class_name}({class_basename}):")
-            else:
-                f.write(f"class {class_name}:")
+
+            inheritance = f"({class_basename})" if class_basename else ""
+            f.write(f"class {class_name}{inheritance}:")
             if class_debug_str:
                 f.write(class_debug_str)
 
@@ -300,16 +304,25 @@ class XmlParser:
                         conditionals = []
                         ver1 = field_attrs.get("ver1")
                         ver2 = field_attrs.get("ver2")
+                        if ver1:
+                            ver1 = Version(ver1)
+                        if ver2:
+                            ver2 = Version(ver2)
                         vercond = field_attrs.get("vercond")
                         cond = field_attrs.get("cond")
-                        if ver1:
-                            conditionals.append(f"(version < {ver1})")
-                        if ver2:
-                            conditionals.append(f"(version < {ver2})")
+
+                        if ver1 and ver2:
+                            conditionals.append(f"{ver1} < version < {ver2}")
+                        elif ver1:
+                            conditionals.append(f"version > {ver1}")
+                        elif ver2:
+                            conditionals.append(f"version < {ver2}")
                         if vercond:
-                            conditionals.append(f"({vercond})")
+                            vercond = Expression(vercond)
+                            conditionals.append(f"{vercond}")
                         if cond:
-                            conditionals.append(f"({cond})")
+                            cond = Expression(cond)
+                            conditionals.append(f"{cond}")
                         if conditionals:
                             f.write(f"\n\t\tif {' and '.join(conditionals)}:")
                             indent = "\n\t\t\t"
