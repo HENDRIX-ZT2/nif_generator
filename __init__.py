@@ -227,7 +227,7 @@ class XmlParser:
 
         # write to python file
         with open(out_file, "w") as f:
-            self.write_imports(f, imports)
+            self.write_imports(f, set(imports))
 
             f.write(f"\nglobal version")
             f.write(f"\nglobal bs_header\n")
@@ -255,7 +255,10 @@ class XmlParser:
                 if len(union_members) > 1:
                     field_types_str = f"typing.Union[{', '.join(field_types)}]"
                 else:
-                    field_types_str = field_type
+                    if field_type == "self.template":
+                        field_types_str = "typing.Any"
+                    else:
+                        field_types_str = field_type
 
                 # write the field type
                 # arrays
@@ -278,10 +281,18 @@ class XmlParser:
                 #     if default.tag != "default":
                 #         raise AttributeError("struct children's children must be 'default' tag")
 
+            f.write(f"\n\n\tdef __init__(self, arg=None, template=None):")
+            # classes that this class inherits from have to be read first
+            if class_basename:
+                f.write(f"\n\t\tsuper().__init__(arg, template)")
+            f.write(f"\n\t\tself.arg = arg")
+            f.write(f"\n\t\tself.template = template")
+
             # write the load() method
             for method_type in ("read", "write"):
                 # check all fields/members in this class and write them as fields
                 f.write(f"\n\n\tdef {method_type}(self, stream):")
+                last_condition = None
                 # classes that this class inherits from have to be read first
                 if class_basename:
                     f.write(f"\n\t\tsuper().{method_type}(stream)")
@@ -324,13 +335,18 @@ class XmlParser:
                             cond = Expression(cond)
                             conditionals.append(f"{cond}")
                         if conditionals:
-                            f.write(f"\n\t\tif {' and '.join(conditionals)}:")
+                            new_condition = f"if {' and '.join(conditionals)}:"
+                            # merge subsequent fields that have the same condition
+                            if last_condition != new_condition:
+                                f.write(f"\n\t\t{new_condition}")
+                            last_condition = new_condition
                             indent = "\n\t\t\t"
                         else:
                             indent = "\n\t\t"
                         arr1 = field_attrs.get("arr1")
                         arr2 = field_attrs.get("arr2")
                         if arr1:
+                            arr1 = Expression(arr1)
                             # todo - handle array 2
                             f.write(f"{indent}self.{field_name} = [{field_type}() for _ in range({arr1})]")
                             f.write(f"{indent}for item in self.{field_name}:")
@@ -347,7 +363,10 @@ class XmlParser:
             if field.tag in ("add", "field", "member"):
                 field_type = convention.name_class(field.attrib["type"])
                 if field_type not in imports:
-                    imports.append(field_type)
+                    if field_type == "self.template":
+                        imports.append("typing")
+                    else:
+                        imports.append(field_type)
 
     def write_imports(self, f, imports):
         for class_import in imports:
@@ -358,14 +377,13 @@ class XmlParser:
                 f.write(f"import {class_import}\n")
 
     def method_for_type(self, dtype: str, mode="read", attr="self.dummy"):
-        # todo - handle template
-        if dtype.lower() == "template":
-            io_func = "TEMPLATE"
-        elif self.tag_dict[dtype.lower()] == "basic":
+        # template or custom type
+        if "template" in dtype.lower() or self.tag_dict[dtype.lower()] != "basic":
+            io_func = f"{mode}_type"
+        # basic type
+        else:
             io_func = f"{mode}_{dtype.lower()}"
             dtype = ""
-        else:
-            io_func = f"{mode}_type"
         if mode == "read":
             return f"{attr} = stream.{io_func}({dtype})"
         elif mode == "write":
@@ -507,7 +525,7 @@ class XmlParser:
                     # get rid of any remaining html escape characters
                     attr_dict[target_attrib] = unescape(expr_str)
         # additional tokens that are not specified by nif.xml
-        fixed_tokens = (("User Version", "user_version"), ("BS Header\\BS Version", "bs_header\\bs_version"), ("Version", "version"), ("\\", "."), ("#ARG#", "ARG"), ("#T#", "TEMPLATE") )
+        fixed_tokens = (("User Version", "user_version"), ("BS Header\\BS Version", "bs_header\\bs_version"), ("Version", "version"), ("\\", "."), ("#ARG#", "self.arg"), ("#T#", "self.template") )
         for attrib, expr_str in attr_dict.items():
             for op_token, op_str in fixed_tokens:
                 expr_str = expr_str.replace(op_token, op_str)
