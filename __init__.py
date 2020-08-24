@@ -321,7 +321,7 @@ class XmlParser:
                         if ver1 and ver2:
                             conditionals.append(f"{ver1} < version < {ver2}")
                         elif ver1:
-                            conditionals.append(f"version > {ver1}")
+                            conditionals.append(f"version >= {ver1}")
                         elif ver2:
                             conditionals.append(f"version < {ver2}")
                         if vercond:
