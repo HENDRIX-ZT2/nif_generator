@@ -9,6 +9,8 @@ Short = Struct("<h")  # int16
 UShort = Struct("<H")  # uint16
 Int = Struct("<i")  # int32
 UInt = Struct("<I")  # uint32
+Int64 = Struct("<q")  # int64
+UInt64 = Struct("<Q")  # uint64
 Float = Struct("<f")  # float32
 HFloat = Struct("<e")  # float16
 
@@ -27,6 +29,10 @@ class BinaryStream(BytesIO):
         "read_ints",
         "read_uint",
         "read_uints",
+        "read_int64",
+        "read_int64s",
+        "read_uint64",
+        "read_uint64s",
         "read_float",
         "read_floats",
         "read_hfloat",
@@ -45,6 +51,10 @@ class BinaryStream(BytesIO):
         "write_ints",
         "write_uint",
         "write_uints",
+        "write_int64",
+        "write_int64s",
+        "write_uint64",
+        "write_uint64s",
         "write_float",
         "write_floats",
         "write_hfloat",
@@ -85,6 +95,16 @@ class BinaryStream(BytesIO):
          self.write_uint,
          self.read_uints,
          self.write_uints) = self.make_read_write_for_struct(UInt)
+
+        (self.read_int64,
+         self.write_int64,
+         self.read_int64s,
+         self.write_int64s) = self.make_read_write_for_struct(Int64)
+
+        (self.read_uint64,
+         self.write_uint64,
+         self.read_uint64s,
+         self.write_uint64s) = self.make_read_write_for_struct(UInt64)
 
         (self.read_float,
          self.write_float,
