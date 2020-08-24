@@ -123,7 +123,7 @@ class XmlParser:
             try:
                 if child.tag in self.struct_types:
                     # StructWriter(child)
-                    # if child.attrib["name"] == "NiAVObject":
+                    # if child.attrib["name"] == "Header":
                     self.read_struct(child)
                 # elif child.tag in self.bitstruct_types:
                 #     self.read_bitstruct(child)
@@ -246,19 +246,23 @@ class XmlParser:
                 for field in union_members:
                     field_attrs = self.replace_tokens(field.attrib)
                     field_type = convention.name_class(field_attrs["type"])
+                    if field_type == "self.template":
+                        field_type = "typing.Any"
+                    elif field_type.lower() in ("byte", "ubyte", "short", "ushort", "int", "uint", "int64", "uint64"):
+                        field_type = "int"
+                    elif field_type.lower() in ("float", "hfloat"):
+                        field_type = "float"
                     field_types.append(field_type)
                     field_default = field_attrs.get("default")
                     field_debug_str = self.clean_comment_str(field.text, indent="\t")
 
                     if field_debug_str.strip():
                         f.write(field_debug_str)
-                if len(union_members) > 1:
+                field_types = set(field_types)
+                if len(field_types) > 1:
                     field_types_str = f"typing.Union[{', '.join(field_types)}]"
                 else:
-                    if field_type == "self.template":
-                        field_types_str = "typing.Any"
-                    else:
-                        field_types_str = field_type
+                    field_types_str = field_type
 
                 # write the field type
                 # arrays
@@ -302,16 +306,8 @@ class XmlParser:
                     if field.tag in ("add", "field"):
                         field_name = convention.name_attribute(field_attrs["name"])
                         field_type = convention.name_class(field_attrs["type"])
-                        # todo - decide if basic or compound
-                        # assume compound
 
-                        for att in ("cond", "vercond", "arr1", "arr2"):
-                            if att in field_attrs:
-                                val = field_attrs[att]
-                                for k, v in local_lower_lookup.items():
-                                    val = val.replace(k, v)
-                                field_attrs[att] = val
-
+                        # parse all conditions
                         conditionals = []
                         ver1 = field_attrs.get("ver1")
                         ver2 = field_attrs.get("ver2")
@@ -343,18 +339,25 @@ class XmlParser:
                             indent = "\n\t\t\t"
                         else:
                             indent = "\n\t\t"
+                        template = field_attrs.get("template")
+                        if template:
+                            template = convention.name_class(template)
+                            imports.append(template)
+                            template_str = f"template={template}"
+                            f.write(f"{indent}# TEMPLATE: {template_str}")
+                        else:
+                            template_str = ""
                         arr1 = field_attrs.get("arr1")
                         arr2 = field_attrs.get("arr2")
                         if arr1:
                             arr1 = Expression(arr1)
                             # todo - handle array 2
-                            f.write(f"{indent}self.{field_name} = [{field_type}() for _ in range({arr1})]")
+                            f.write(f"{indent}self.{field_name} = [{field_type}({template_str}) for _ in range({arr1})]")
                             f.write(f"{indent}for item in self.{field_name}:")
                             f.write(f"{indent}\titem.{method_type}(stream)")
 
                         else:
                             f.write(f"{indent}{self.method_for_type(field_type, mode=method_type, attr=f'self.{field_name}')}")
-                            # f.write(f"{indent}self.{field_name} = {field_type}().{method_type}(stream)")
 
     def collect_types(self, imports, struct):
         """Iterate over all fields in struct and collect type references"""

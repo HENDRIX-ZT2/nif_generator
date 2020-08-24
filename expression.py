@@ -1,47 +1,8 @@
 """Expression parser (for arr1, arr2, cond, and vercond xml attributes of
 <add> tag)."""
 
-# --------------------------------------------------------------------------
-# ***** BEGIN LICENSE BLOCK *****
-#
-# Copyright (c) 2007-2012, Python File Format Interface
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-#    * Redistributions of source code must retain the above copyright
-#      notice, this list of conditions and the following disclaimer.
-#
-#    * Redistributions in binary form must reproduce the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer in the documentation and/or other materials provided
-#      with the distribution.
-#
-#    * Neither the name of the Python File Format Interface
-#      project nor the names of its contributors may be used to endorse
-#      or promote products derived from this software without specific
-#      prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# ***** END LICENSE BLOCK *****
-# --------------------------------------------------------------------------
-
 import re
-import sys  # stderr (for debugging)
+import naming_conventions as convention
 
 
 class Version(object):
@@ -99,6 +60,7 @@ class Version(object):
         else:
             return ""
 
+
 class Expression(object):
     """This class represents an expression.
 
@@ -130,8 +92,7 @@ class Expression(object):
     False
     """
 
-    operators = set(('==', '!=', '>=', '<=', '&&', '||', '&', '|', '-', '!',
-                     '<', '>', '/', '*', '+', '%'))
+    operators = {'==', '!=', '>=', '<=', '&&', '||', '&', '|', '-', '!', '<', '>', '/', '*', '+', '%'}
 
     def __init__(self, expr_str, name_filter=None):
         try:
@@ -226,7 +187,10 @@ class Expression(object):
             left = f"({left})"
         if isinstance(self._right, Expression):
             right = f"({right})"
-        return f"{left} {self._op} {right}"
+        op = self._op
+        for k, v in (("&&", "and"), ("||", "or")):
+            op = op.replace(k, v)
+        return f"{left} {op} {right}"
 
     @classmethod
     def _parse(cls, expr_str, name_filter=None):
@@ -241,26 +205,19 @@ class Expression(object):
         for op in cls.operators:
             if expr_str.find(op) != -1:
                 return Expression(expr_str, name_filter)
-        # try to convert it to an integer
-        try:
-            return int(expr_str)
-        # failed, so return the string, passed through the name filter
-        except ValueError:
-            pass
-        m = re.match(r'^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$', expr_str)
-        if m:
-            ver = (
-                (int(m.group(1)) << 24)
-                + (int(m.group(2)) << 16)
-                + (int(m.group(3)) << 8)
-                + int(m.group(4))
-            )
-            return ver
+        # try to convert it to one of the following classes
+        for create_cls in (int, Version):
+            try:
+                return create_cls(expr_str)
+            # failed
+            except ValueError:
+                pass
+        # at this point, expr_str is a single attribute
         # apply name filter on each component separately
         # (where a dot separates components)
         if name_filter is None:
             def name_filter(x):
-                return x
+                return "self." + convention.name_attribute(x)
         return '.'.join(name_filter(comp)
                         for comp in expr_str.split("."))
 

@@ -4,15 +4,25 @@
 
     <!--Basic Types-->
 
-    <basic name="byte" count="1">
+    <basic name="ubyte" count="1">
         An unsigned 8-bit integer.
     </basic>
+    <basic name="byte" count="1">
+        A signed 8-bit integer.
+    </basic>
 
+    <basic name="uint64" count="1">
+        An unsigned 64-bit integer.
+    </basic>
     <basic name="uint" count="1">
         An unsigned 32-bit integer.
     </basic>
     <basic name="ushort" count="1" >
         An unsigned 16-bit integer.
+    </basic>
+
+    <basic name="int64" count="1" >
+        A signed 64-bit integer.
     </basic>
 
     <basic name="int" count="1" >
