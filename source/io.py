@@ -10,6 +10,7 @@ UShort = Struct("<H")  # uint16
 Int = Struct("<i")  # int32
 UInt = Struct("<I")  # uint32
 Float = Struct("<f")  # float32
+HFloat = Struct("<e")  # float16
 
 
 class BinaryStream(BytesIO):
@@ -28,6 +29,8 @@ class BinaryStream(BytesIO):
         "read_uints",
         "read_float",
         "read_floats",
+        "read_hfloat",
+        "read_hfloats",
         "read_str",
         "read_strs",
         "write_byte",
@@ -44,6 +47,8 @@ class BinaryStream(BytesIO):
         "write_uints",
         "write_float",
         "write_floats",
+        "write_hfloat",
+        "write_hfloats",
         "write_str",
         "write_strs",
     )
@@ -85,6 +90,11 @@ class BinaryStream(BytesIO):
          self.write_float,
          self.read_floats,
          self.write_floats) = self.make_read_write_for_struct(Float)
+
+        (self.read_hfloat,
+         self.write_hfloat,
+         self.read_hfloats,
+         self.write_hfloats) = self.make_read_write_for_struct(HFloat)
 
         (self.read_str,
          self.write_str,
