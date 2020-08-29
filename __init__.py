@@ -34,6 +34,7 @@ env.filters["to_basic_type"] = filters.to_basic_type
 basics: List[str] = []
 
 FIELD_TYPES = ("add", "field")
+VER = "stream.version"
 
 def write_file(filename: str, contents: str):
     file_dir = os.path.dirname(filename)
@@ -359,11 +360,11 @@ class XmlParser:
                         cond = field.attrib.get("cond")
 
                         if ver1 and ver2:
-                            conditionals.append(f"{ver1} <= stream.version < {ver2}")
+                            conditionals.append(f"{ver1} <= {VER} < {ver2}")
                         elif ver1:
-                            conditionals.append(f"stream.version >= {ver1}")
+                            conditionals.append(f"{VER} >= {ver1}")
                         elif ver2:
-                            conditionals.append(f"stream.version < {ver2}")
+                            conditionals.append(f"{VER} < {ver2}")
                         if vercond:
                             vercond = Expression(vercond)
                             conditionals.append(f"{vercond}")
