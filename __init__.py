@@ -68,7 +68,9 @@ class Imports:
 
     def add(self, cls_to_import):
         if cls_to_import:
-            self.imports.append(cls_to_import)
+            must_import, import_type = self.parent.map_type(cls_to_import)
+            if must_import:
+                self.imports.append(import_type)
 
     def write(self, stream):
         for class_import in set(self.imports):
@@ -287,6 +289,7 @@ class XmlParser:
                 field_types = []
                 for field in union_members:
                     field_type = field.attrib["type"]
+                    # todo - make consisten / merge with map_type()
                     if field_type == "self.template":
                         field_type = "typing.Any"
                         imports.add("typing")
@@ -294,6 +297,8 @@ class XmlParser:
                         field_type = "int"
                     elif field_type.lower() in ("float", "hfloat"):
                         field_type = "float"
+                    elif field_type.lower() in ("bool",):
+                        field_type = "bool"
                     field_types.append(field_type)
                     field_default = field.attrib.get("default")
                     field_debug_str = self.clean_comment_str(field.text, indent="\t")
@@ -463,10 +468,12 @@ class XmlParser:
 
     def map_type(self, in_type):
         l_type = in_type.lower()
-        if self.tag_dict[l_type] != "basic":
+        if self.tag_dict.get(l_type) != "basic":
             return True, in_type
         else:
-            if l_type == "bool":
+            if "float" in l_type:
+                return False, "float"
+            elif l_type == "bool":
                 return False, "bool"
             else:
                 return False, "int"
@@ -566,7 +573,7 @@ class XmlParser:
                     xml_struct.attrib[target_attrib] = unescape(expr_str)
         # additional tokens that are not specified by nif.xml
         # ("User Version", "user_version"), ("BS Header\\BS Version", "bs_header\\bs_version"), ("Version", "version")
-        fixed_tokens = (("\\", "."), ("#ARG#", "self.arg"), ("#T#", "self.template") )
+        fixed_tokens = (("\\", "."), ("#ARG#", "arg"), ("#T#", "self.template"))
         for attrib, expr_str in xml_struct.attrib.items():
             for op_token, op_str in fixed_tokens:
                 expr_str = expr_str.replace(op_token, op_str)
