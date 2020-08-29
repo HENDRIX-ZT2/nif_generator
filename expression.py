@@ -217,9 +217,12 @@ class Expression(object):
         # (where a dot separates components)
         if name_filter is None:
             def name_filter(x):
-                return "self." + convention.name_attribute(x)
-        return '.'.join(name_filter(comp)
-                        for comp in expr_str.split("."))
+                return convention.name_attribute(x)
+        prefix = "self."
+        # globals are stored on the stream
+        if "version" in expr_str.lower():
+            prefix = "stream."
+        return prefix + ('.'.join(name_filter(comp) for comp in expr_str.split(".")))
 
     @classmethod
     def _partition(cls, expr_str):
