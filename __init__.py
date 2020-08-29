@@ -33,6 +33,7 @@ env.filters["to_basic_type"] = filters.to_basic_type
 
 basics: List[str] = []
 
+FIELD_TYPES = ("add", "field")
 
 def write_file(filename: str, contents: str):
     file_dir = os.path.dirname(filename)
@@ -40,6 +41,43 @@ def write_file(filename: str, contents: str):
         os.makedirs(file_dir)
     with open(filename, 'w', encoding='utf-8') as file:
         file.write(contents)
+
+
+class Imports:
+    """Creates and writes an import block"""
+
+    def __init__(self, parser, xml_struct):
+        self.parent = parser
+        self.xml_struct = xml_struct
+        self.path_dict = parser.path_dict
+        self.imports = []
+        # import parent class
+        self.add(xml_struct.attrib.get("inherit"))
+
+        # import classes used in the fields
+        for field in xml_struct:
+            if field.tag in ("add", "field", "member"):
+                field_type = field.attrib["type"]
+                template = field.attrib.get("template")
+                self.add(template)
+                if field_type == "self.template":
+                    self.add("typing")
+                else:
+                    self.add(field_type)
+
+    def add(self, cls_to_import):
+        if cls_to_import:
+            self.imports.append(cls_to_import)
+
+    def write(self, stream):
+        for class_import in set(self.imports):
+            if class_import in self.path_dict:
+                import_path = "generated." + self.path_dict[class_import].replace("\\", ".")
+                stream.write(f"from {import_path} import {class_import}\n")
+            else:
+                stream.write(f"import {class_import}\n")
+        if self.imports:
+            stream.write("\n\n")
 
 
 class XmlParser:
@@ -195,45 +233,48 @@ class XmlParser:
             os.makedirs(out_dir)
         return out_file
 
+    def apply_convention(self, struct, func, params):
+        for k in params:
+            if struct.attrib.get(k):
+                struct.attrib[k] = func(struct.attrib[k])
+
+    def apply_conventions(self, struct):
+        # struct top level
+        self.apply_convention(struct, convention.name_class, ("name", "inherit"))
+        # a struct's fields
+        for field in struct:
+            if field.tag in FIELD_TYPES:
+                self.apply_convention(field, convention.name_attribute, ("name",))
+                self.apply_convention(field, convention.name_class, ("type",))
+
+        # filter comment str
+        struct.text = self.clean_comment_str(struct.text, indent="")
+
     def read_struct(self, struct):
         """Create a struct class"""
-        attrs = self.replace_tokens(struct.attrib)
-        class_name, class_basename, class_debug_str = self.get_names(struct, attrs)
+        self.replace_tokens(struct)
+        self.apply_conventions(struct)
+        class_name = struct.attrib.get("name")
+        class_basename = struct.attrib.get("inherit")
+        class_debug_str = struct.text
         out_file = self.get_out_path(class_name)
-        # list of all classes that have to be imported
-        imports = []
-
-        # lookup members
-        local_lower_lookup = {}
+        # handle imports
+        imports = Imports(self, struct)
 
         field_unions_dict = collections.OrderedDict()
         for field in struct:
-            field_attrs = self.replace_tokens(field.attrib)
-            if field.tag in ("add", "field"):
-                field_name = convention.name_attribute(field_attrs["name"])
-                local_lower_lookup[field_attrs["name"]] = "self."+field_name
+            if field.tag in FIELD_TYPES:
+                field_name = field.attrib["name"]
                 if field_name not in field_unions_dict:
                     field_unions_dict[field_name] = []
                 else:
                     # field exists and we add to it, so we have an union and must import typing module
-                    imports.append("typing")
+                    imports.add("typing")
                 field_unions_dict[field_name].append(field)
-
-        # import parent class
-        if class_basename:
-            imports.append(class_basename)
-
-        self.collect_types(imports, struct)
 
         # write to python file
         with open(out_file, "w") as f:
-            self.write_imports(f, set(imports))
-
-            f.write(f"\nglobal version")
-            f.write(f"\nglobal bs_header\n")
-
-            if imports:
-                f.write("\n\n")
+            imports.write(f)
 
             inheritance = f"({class_basename})" if class_basename else ""
             f.write(f"class {class_name}{inheritance}:")
@@ -244,16 +285,16 @@ class XmlParser:
             for field_name, union_members in field_unions_dict.items():
                 field_types = []
                 for field in union_members:
-                    field_attrs = self.replace_tokens(field.attrib)
-                    field_type = convention.name_class(field_attrs["type"])
+                    field_type = field.attrib["type"]
                     if field_type == "self.template":
                         field_type = "typing.Any"
+                        imports.add("typing")
                     elif field_type.lower() in ("byte", "ubyte", "short", "ushort", "int", "uint", "int64", "uint64"):
                         field_type = "int"
                     elif field_type.lower() in ("float", "hfloat"):
                         field_type = "float"
                     field_types.append(field_type)
-                    field_default = field_attrs.get("default")
+                    field_default = field.attrib.get("default")
                     field_debug_str = self.clean_comment_str(field.text, indent="\t")
 
                     if field_debug_str.strip():
@@ -266,7 +307,7 @@ class XmlParser:
 
                 # write the field type
                 # arrays
-                if field_attrs.get("arr1"):
+                if field.attrib.get("arr1"):
                     f.write(f"\n\t{field_name}: List[{field_types_str}]")
                 # plain
                 else:
@@ -302,28 +343,27 @@ class XmlParser:
                     f.write(f"\n\t\tsuper().{method_type}(stream)")
 
                 for field in struct:
-                    field_attrs = self.replace_tokens(field.attrib)
-                    if field.tag in ("add", "field"):
-                        field_name = convention.name_attribute(field_attrs["name"])
-                        field_type = convention.name_class(field_attrs["type"])
+                    if field.tag in FIELD_TYPES:
+                        field_name = field.attrib["name"]
+                        field_type = field.attrib["type"]
 
                         # parse all conditions
                         conditionals = []
-                        ver1 = field_attrs.get("ver1")
-                        ver2 = field_attrs.get("ver2")
+                        ver1 = field.attrib.get("ver1")
+                        ver2 = field.attrib.get("ver2")
                         if ver1:
                             ver1 = Version(ver1)
                         if ver2:
                             ver2 = Version(ver2)
-                        vercond = field_attrs.get("vercond")
-                        cond = field_attrs.get("cond")
+                        vercond = field.attrib.get("vercond")
+                        cond = field.attrib.get("cond")
 
                         if ver1 and ver2:
-                            conditionals.append(f"{ver1} < version < {ver2}")
+                            conditionals.append(f"{ver1} <= stream.version < {ver2}")
                         elif ver1:
-                            conditionals.append(f"version >= {ver1}")
+                            conditionals.append(f"stream.version >= {ver1}")
                         elif ver2:
-                            conditionals.append(f"version < {ver2}")
+                            conditionals.append(f"stream.version < {ver2}")
                         if vercond:
                             vercond = Expression(vercond)
                             conditionals.append(f"{vercond}")
@@ -339,16 +379,14 @@ class XmlParser:
                             indent = "\n\t\t\t"
                         else:
                             indent = "\n\t\t"
-                        template = field_attrs.get("template")
+                        template = field.attrib.get("template")
                         if template:
-                            template = convention.name_class(template)
-                            imports.append(template)
                             template_str = f"template={template}"
                             f.write(f"{indent}# TEMPLATE: {template_str}")
                         else:
                             template_str = ""
-                        arr1 = field_attrs.get("arr1")
-                        arr2 = field_attrs.get("arr2")
+                        arr1 = field.attrib.get("arr1")
+                        arr2 = field.attrib.get("arr2")
                         if arr1:
                             arr1 = Expression(arr1)
                             # todo - handle array 2
@@ -456,18 +494,16 @@ class XmlParser:
                 f.write(class_debug_str)
 
             for field in element:
-                field_attrs = self.replace_tokens(field.attrib)
-                field_name = convention.name_attribute(field_attrs["name"])
-                _, field_type = self.map_type(convention.name_class(field_attrs["type"]))
-                f.write(f"\n\t{field_name} = BitfieldMember(pos={field_attrs['pos']}, mask={field_attrs['mask']}, return_type={field_type})")
+                field_name = convention.name_attribute(field.attrib["name"])
+                _, field_type = self.map_type(convention.name_class(field.attrib["type"]))
+                f.write(f"\n\t{field_name} = BitfieldMember(pos={field.attrib['pos']}, mask={field.attrib['mask']}, return_type={field_type})")
 
             f.write("\n\n\tdef set_defaults(self):")
             defaults = []
             for field in element:
-                field_attrs = self.replace_tokens(field.attrib)
-                field_name = convention.name_attribute(field_attrs["name"])
-                field_type = convention.name_class(field_attrs["type"])
-                field_default = field_attrs.get("default")
+                field_name = convention.name_attribute(field.attrib["name"])
+                field_type = convention.name_class(field.attrib["type"])
+                field_default = field.attrib.get("default")
                 # write the field's default, if it exists
                 if field_default:
                     # we have to check if the default is an enum default value, in which case it has to be a member of that enum
@@ -516,30 +552,31 @@ class XmlParser:
         if doc_text:
             doc += doc_text.strip()
             
-    def replace_tokens(self, attr_dict):
-        """Update attr_dict with content of tokens+versions list."""
+    def replace_tokens(self, xml_struct):
+        """Update xml_struct's (and all of its children's) attrib dict with content of tokens+versions list."""
         # replace versions after tokens because tokens include versions
         for tokens, target_attribs in self.tokens + self.versions:
             for target_attrib in target_attribs:
-                if target_attrib in attr_dict:
-                    expr_str = attr_dict[target_attrib]
+                if target_attrib in xml_struct.attrib:
+                    expr_str = xml_struct.attrib[target_attrib]
                     for op_token, op_str in tokens:
                         expr_str = expr_str.replace(op_token, op_str)
                     # get rid of any remaining html escape characters
-                    attr_dict[target_attrib] = unescape(expr_str)
+                    xml_struct.attrib[target_attrib] = unescape(expr_str)
         # additional tokens that are not specified by nif.xml
-        fixed_tokens = (("User Version", "user_version"), ("BS Header\\BS Version", "bs_header\\bs_version"), ("Version", "version"), ("\\", "."), ("#ARG#", "self.arg"), ("#T#", "self.template") )
-        for attrib, expr_str in attr_dict.items():
+        # ("User Version", "user_version"), ("BS Header\\BS Version", "bs_header\\bs_version"), ("Version", "version")
+        fixed_tokens = (("\\", "."), ("#ARG#", "self.arg"), ("#T#", "self.template") )
+        for attrib, expr_str in xml_struct.attrib.items():
             for op_token, op_str in fixed_tokens:
                 expr_str = expr_str.replace(op_token, op_str)
-            attr_dict[attrib] = expr_str
+            xml_struct.attrib[attrib] = expr_str
         # onlyT & excludeT act as aliases for deprecated cond
-        prefs = ( ("onlyT", ""), ("excludeT", "!") )
-        for t, pref in prefs:
-            if t in attr_dict:
-                attr_dict["cond"] = pref+attr_dict[t]
+        for t, pref in (("onlyT", ""), ("excludeT", "!")):
+            if t in xml_struct.attrib:
+                xml_struct.attrib["cond"] = pref+xml_struct.attrib[t]
                 break
-        return attr_dict
+        for xml_child in xml_struct:
+            self.replace_tokens(xml_child)
 
 
 def generate_classes():
