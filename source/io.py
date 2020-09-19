@@ -179,3 +179,11 @@ class BinaryStream(BytesIO):
         if array.dtype != dtype:
             array = array.astype(dtype)
         self.write(array.tobytes())
+
+    def read_type(self, cls):
+        obj = cls.__new__(cls)
+        obj.read(self)
+        return obj
+
+    def write_type(self, obj):
+        obj.write(self)

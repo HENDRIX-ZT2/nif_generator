@@ -65,6 +65,11 @@ class Imports:
                     self.add("typing")
                 else:
                     self.add(field_type)
+                # arr1 needs typing.List
+                arr1 = field.attrib.get("arr1")
+                if arr1:
+                    self.add("typing")
+
 
     def add(self, cls_to_import):
         if cls_to_import:
@@ -118,7 +123,6 @@ class XmlParser:
         self.path_dict = {}
         # maps each type to its member tag type
         self.tag_dict = {}
-        self.copy_src_to_generated()
 
         self.storage_types = set()
 
@@ -185,6 +189,7 @@ class XmlParser:
             except Exception as err:
                 logging.error(err)
         logging.info(self.storage_types)
+        self.copy_src_to_generated()
 
     # the following constructs do not create classes
     def read_token(self, token):
@@ -314,7 +319,7 @@ class XmlParser:
                 # write the field type
                 # arrays
                 if field.attrib.get("arr1"):
-                    f.write(f"\n\t{field_name}: List[{field_types_str}]")
+                    f.write(f"\n\t{field_name}: typing.List[{field_types_str}]")
                 # plain
                 else:
                     f.write(f"\n\t{field_name}: {field_types_str}")
@@ -393,15 +398,18 @@ class XmlParser:
                             template_str = ""
                         arr1 = field.attrib.get("arr1")
                         arr2 = field.attrib.get("arr2")
-                        if arr1:
-                            arr1 = Expression(arr1)
-                            # todo - handle array 2
-                            f.write(f"{indent}self.{field_name} = [{field_type}({template_str}) for _ in range({arr1})]")
-                            f.write(f"{indent}for item in self.{field_name}:")
-                            f.write(f"{indent}\titem.{method_type}(stream)")
 
-                        else:
-                            f.write(f"{indent}{self.method_for_type(field_type, mode=method_type, attr=f'self.{field_name}')}")
+                        f.write(f"{indent}{self.method_for_type(field_type, mode=method_type, attr=f'self.{field_name}', arr1=arr1)}")
+
+            f.write(f"\n\n\tdef __repr__(self):")
+            f.write(f"\n\t\ts = '{class_name}'")
+            for field in struct:
+                if field.tag in FIELD_TYPES:
+                    field_name = field.attrib["name"]
+                    f.write(f"\n\t\ts += '\\n{field_name} ' + self.{field_name}.__repr__()")
+            f.write(f"\n\t\ts += '\\n'")
+            f.write(f"\n\t\treturn s")
+
 
     def collect_types(self, imports, struct):
         """Iterate over all fields in struct and collect type references"""
@@ -423,7 +431,7 @@ class XmlParser:
             else:
                 f.write(f"import {class_import}\n")
 
-    def method_for_type(self, dtype: str, mode="read", attr="self.dummy"):
+    def method_for_type(self, dtype: str, mode="read", attr="self.dummy", arr1=None):
         # template or custom type
         if "template" in dtype.lower() or self.tag_dict[dtype.lower()] != "basic":
             io_func = f"{mode}_type"
@@ -431,10 +439,22 @@ class XmlParser:
         else:
             io_func = f"{mode}_{dtype.lower()}"
             dtype = ""
-        if mode == "read":
-            return f"{attr} = stream.{io_func}({dtype})"
-        elif mode == "write":
-            return f"stream.{io_func}({attr})"
+        if not arr1:
+            if mode == "read":
+                return f"{attr} = stream.{io_func}({dtype})"
+            elif mode == "write":
+                return f"stream.{io_func}({attr})"
+        else:
+            arr1 = Expression(arr1)
+            if mode == "read":
+                return f"{attr} = [stream.{io_func}({dtype}) for _ in range({arr1})]"
+            elif mode == "write":
+                return f"for item in {attr}: stream.{io_func}(item)"
+
+            # todo - handle array 2
+            # f.write(f"{indent}self.{field_name} = [{field_type}({template_str}) for _ in range({arr1})]")
+        #     f.write(f"{indent}for item in self.{field_name}:")
+        #     f.write(f"{indent}\titem.{method_type}(stream)")
         # return # f.write(f"{indent}self.{field_name} = {field_type}().{method_type}(stream)")
             # raise ModuleNotFoundError(f"Storage {dtype} is not a basic type.")
         # array of basic

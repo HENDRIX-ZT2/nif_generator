@@ -190,6 +190,8 @@ class Expression(object):
         op = self._op
         for k, v in (("&&", "and"), ("||", "or")):
             op = op.replace(k, v)
+        if op == "/":
+            return f"int({left} {op} {right})"
         return f"{left} {op} {right}"
 
     @classmethod
