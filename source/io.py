@@ -228,7 +228,7 @@ class ZipFile(IoFile):
 
     # @staticmethod
     @contextmanager
-    def unzipper(self, filepath, start, compressed_size):
+    def unzipper(self, filepath, start, compressed_size, save_temp_dat=""):
         with self.reader(filepath) as stream:
             # self.unzip(stream, compressed_size)
             stream.seek(start)
@@ -240,5 +240,9 @@ class ZipFile(IoFile):
             # we avoid the two zlib magic bytes to get our unzipped content
             # zlib_data = bytearray(zlib.decompress(zlib_compressed_data, wbits=-zlib.MAX_WBITS))
             zlib_data = zlib.decompress(zlib_compressed_data, wbits=-zlib.MAX_WBITS)
+        if save_temp_dat:
+            # for debugging, write deflated content to dat
+            with open(save_temp_dat, 'wb') as out:
+                out.write(zlib_data)
         with BinaryStream(zlib_data) as stream:
             yield stream  # type: ignore

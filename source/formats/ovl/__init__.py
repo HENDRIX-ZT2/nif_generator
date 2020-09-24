@@ -38,8 +38,8 @@ class OvsFile(OvsHeader, ZipFile):
 		self._byte_order = "<"
 
 	def unzip(self, filepath, start, compressed_size=0):
-		with self.unzipper(filepath, start, compressed_size) as stream:
-			# print(stream.read(20))
+		save_temp_dat = f"{filepath}_{self.arg.name}.dat" if "write_dat" in self.ovl.commands else ""
+		with self.unzipper(filepath, start, compressed_size, save_temp_dat=save_temp_dat) as stream:
 			print("reading from unzipped ovs")
 			super().read(stream)
 
