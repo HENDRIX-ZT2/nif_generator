@@ -579,6 +579,15 @@ class OvlFile(Header, IoFile):
 		else:
 			self.progress_callback = self.dummy_callback
 
+	def get_sized_str_entry(self, name):
+		lower_name = name.lower()
+		for archive in self.ovs_files:
+			for sized_str_entry in archive.sized_str_entries:
+				if lower_name == sized_str_entry.lower_name:
+					return sized_str_entry
+		# still here - error!
+		raise KeyError(f"Can't find a sizedstr entry for {name}, not from this archive?")
+
 	# dummy (black hole) callback for if we decide we don't want one
 	def dummy_callback(self, *args, **kwargs):
 		return
