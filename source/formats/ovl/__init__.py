@@ -6,6 +6,7 @@ import time
 
 from generated.formats.ovl.compound.Header import Header
 from generated.formats.ovl.compound.OvsHeader import OvsHeader
+from generated.formats.ovl.compound.SetHeader import SetHeader
 from generated.io import IoFile, ZipFile
 
 
@@ -31,13 +32,18 @@ class OvsFile(OvsHeader, ZipFile):
 		self.arg = archive_entry
 		self.archive_index = archive_index
 
+		# for temporary pyffi compat
+		self.version = self.ovl.version
+		self.user_version = self.ovl.user_version
+		self._byte_order = "<"
+
 	def unzip(self, filepath, start, compressed_size=0):
 		with self.unzipper(filepath, start, compressed_size) as stream:
 			# print(stream.read(20))
 			print("reading from unzipped ovs")
 			super().read(stream)
 
-			print(self.header_entries)
+			# print(self.header_entries)
 			header_entry_index = 0
 			for header_type in self.header_types:
 				for i in range(header_type.num_headers):
@@ -64,6 +70,7 @@ class OvsFile(OvsHeader, ZipFile):
 				sized_str_entry.fragments = []
 				sized_str_entry.model_data_frags = []
 				sized_str_entry.model_count = 0
+				# print(sized_str_entry.name)
 				# get data entry for link to buffers, or none
 				sized_str_entry.data_entry = self.find_entry(self.data_entries, sized_str_entry.file_hash, sized_str_entry.ext_hash)
 
@@ -73,6 +80,9 @@ class OvsFile(OvsHeader, ZipFile):
 				fragment.lod = False
 				fragment.name = None
 
+			set_data_offset = stream.tell()
+			print("Set header address", set_data_offset)
+			self.set_header = stream.read_type(SetHeader)
 			if not (self.set_header.sig_a == 1065336831 and self.set_header.sig_b == 16909320):
 				raise AttributeError("Set header signature check failed!")
 
@@ -83,24 +93,20 @@ class OvsFile(OvsHeader, ZipFile):
 			for asset_entry in self.set_header.assets:
 				asset_entry.name = self.get_name(asset_entry)
 				asset_entry.entry = self.sized_str_entries[asset_entry.file_index]
-			#
-			# set_data_offset = stream.tell()
-			# print("Set header address", set_data_offset)
-			# self.read_sets_assets()
+
 			self.map_assets()
 
-			# # size check again
-			# self.header_size = stream.tell()
-			self.header_size = self.arg.header_size
-			# set_data_size = self.header_size - set_data_offset
-			# if set_data_size != self.archive_entry.set_data_size:
-			# 	raise AttributeError("Set data size incorrect (got {}, expected {})!".format(set_data_size,
-			# 																				 self.archive_entry.set_data_size))
-			#
-			# # another integrity check
-			# if self.calc_uncompressed_size() != self.archive_entry.uncompressed_size:
-			# 	raise AttributeError("Archive.uncompressed_size ({}) does not match calculated size ({})".format(
-			# 		self.archive_entry.uncompressed_size, self.calc_uncompressed_size()))
+			# size check again
+			self.header_size = stream.tell()
+			set_data_size = self.header_size - set_data_offset
+			if set_data_size != self.arg.set_data_size:
+				raise AttributeError("Set data size incorrect (got {}, expected {})!".format(set_data_size,
+																							 self.arg.set_data_size))
+
+			# another integrity check
+			if self.calc_uncompressed_size() != self.arg.uncompressed_size:
+				raise AttributeError("Archive.uncompressed_size ({}) does not match calculated size ({})".format(
+					self.arg.uncompressed_size, self.calc_uncompressed_size()))
 
 			# go back to header offset
 			stream.seek(self.header_size)
@@ -117,8 +123,8 @@ class OvsFile(OvsHeader, ZipFile):
 			self.map_frags()
 			self.map_buffers(stream)
 
-			if "write_frag_log" in self.ovl.commands:
-				self.write_frag_log()
+			# if "write_frag_log" in self.ovl.commands:
+			self.write_frag_log()
 
 	def calc_pointer_addresses(self):
 		print("Calculating pointer addresses")
@@ -193,8 +199,8 @@ class OvsFile(OvsHeader, ZipFile):
 				set_entry.end = self.set_header.sets[i + 1].start
 			# map assets to entry
 			set_entry.assets = self.set_header.assets[set_entry.start: set_entry.end]
-			# print("SET:",set_entry.name)
-			# print("ASSETS:",[a.name for a in set_entry.assets])
+			# print("SET:", set_entry.name)
+			# print("ASSETS:", [a.name for a in set_entry.assets])
 			# store the references on the corresponding sized str entry
 			set_entry.entry.children = [self.sized_str_entries[a.file_index] for a in set_entry.assets]
 			for child in set_entry.entry.children:
@@ -356,7 +362,7 @@ class OvsFile(OvsHeader, ZipFile):
 		for ss_index, sized_str_entry in enumerate(sorted_sized_str_entries):
 			self.ovl.print_and_callback("Collecting fragments", value=ss_index, max_value=ss_max)
 			# get fixed fragments
-			# print("Collecting fragments for",sized_str_entry.name, sized_str_entry.pointers[0].address)
+			print("Collecting fragments for",sized_str_entry.name, sized_str_entry.pointers[0].address)
 			hi = sized_str_entry.pointers[0].header_index
 			if hi != MAX_UINT32:
 				frags = self.header_entries[hi].fragments
@@ -366,8 +372,7 @@ class OvsFile(OvsHeader, ZipFile):
 
 				t = dic[sized_str_entry.ext]
 				# get and set fragments
-				sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address,
-																	   t)
+				sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, t)
 
 			elif sized_str_entry.ext == "fgm":
 				sized_str_entry.fragments = self.get_frag_after_terminator(frags,
@@ -464,7 +469,9 @@ class OvsFile(OvsHeader, ZipFile):
 				frag.pointers[0].data_size) + " " + str(frag.pointers[1].address) + " " + str(
 				frag.pointers[1].data_size) + " " + str(frag.name) + " " + str(frag.pointers[0].type) + " " + str(
 				frag.pointers[1].type)
-		with open(self.indir("frag" + str(self.archive_index) + ".log"), "w") as f:
+		frag_log_path = self.indir("frag" + str(self.archive_index) + ".log")
+		print(f"Writing Fragment log to {frag_log_path}")
+		with open(frag_log_path, "w") as f:
 			f.write(frag_log)
 
 	@staticmethod
@@ -484,7 +491,7 @@ class OvsFile(OvsHeader, ZipFile):
 					break
 		else:
 			raise AttributeError(
-				f"Could not find a terminator fragment matching header types {h_types} and pointer[0].size {terminator}")
+				f"Could not find a terminator fragment matching initpos {initpos} and pointer[0].size {terminator}")
 		return out
 
 	@staticmethod
