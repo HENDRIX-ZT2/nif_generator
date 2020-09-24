@@ -7,13 +7,7 @@
     <basic name="byte" count="1">
         An unsigned 8-bit integer.
     </basic>
-    <basic name="ubyte" count="1">
-        An unsigned 8-bit integer.
-    </basic>
 
-    <basic name="uint64" count="1">
-        An unsigned 64-bit integer.
-    </basic>
     <basic name="uint" count="1">
         An unsigned 32-bit integer.
     </basic>
@@ -36,7 +30,7 @@
     <basic name="float" count="0" >
         A standard 32-bit floating point number.
     </basic>
-
+	
 	
 	<enum name="DdsType" storage="byte">
 		maps the OVL's dds type to name of compression format
@@ -114,18 +108,10 @@
     </enum>
 	
 	<!-- Structs for the OVL file -->
-
-    <compound name="ZStringBuffer" count="0" >
-        Holds a buffer of zero-terminated strings
-    </compound>
-
-    <compound name="FixedString" count="0" >
-        Holds a string of a fixed size, given as an argument.
-    </compound>
-
+	
     <compound name="Header">
         Found at the beginning of every OVL file
-        <add name="FRES" type="FixedString" arg="4">'FRES'</add>
+        <add name="FRES" type="byte" arr1="4">'FRES'</add>
         <add name="Flag" type="byte" >if 0x08 then 64bit</add>
         <add name="Version" type="byte" >0x13 = JWE</add>
         <add name="Needs Bitswap" type="byte" >endianness?</add>
@@ -156,10 +142,10 @@
         <add name="Zeros 2" type="byte" arr1="52">52 bytes zeros</add>
 		
 		<!-- end of fixed header structure -->
-        <add name="Names" type="ZStringBuffer" arg="Len Names">Name buffer for assets and file mime types.</add>
+        <add name="Names" type="char" arr1="Len Names">Name buffer for assets and file mime types.</add>
         <add name="Mimes" type="MimeEntry" arr1="Num Mimes">Array of MimeEntry objects that represent a mime type (file extension) each. </add>
         <add name="Files" type="FileEntry" arr1="Num Files">Array of FileEntry objects.</add>
-        <add name="Archive Names" type="ZStringBuffer" arg="Len Archive Names">Name buffer for archives, usually will be STATIC followed by any OVS names</add>
+        <add name="Archive Names" type="char" arr1="Len Archive Names">Name buffer for archives, usually will be STATIC followed by any OVS names</add>
         <add name="Archives" type="ArchiveEntry" arr1="Num Archives">Array of ArchiveEntry objects.</add>
         <add name="Dirs" type="DirEntry" arr1="Num Dirs">Array of DirEntry objects.</add>
         <add name="Textures" type="TextureEntry" arr1="Num Textures">Array of TextureEntry objects.</add>
@@ -217,18 +203,6 @@
         <add name="header size" type="uint" >sum of the archives header entry data blocks + the ovs header offset</add>
         <add name="ovs offset" type="uint" >Seemingly unused, can be zeroed without effect ingame in JWE</add>
     </compound>
-
-    <compound name="OvsHeader" >
-        Description of one archive's content
-        <add name="header types" type="HeaderType" arr1="#ARG#\Num Header Types"></add>
-        <add name="header entries" type="HeaderEntry" arr1="#ARG#\Num Headers"></add>
-        <add name="data entries" type="DataEntry" arr1="#ARG#\Num Datas"></add>
-        <add name="buffer entries" type="BufferEntry" arr1="#ARG#\Num Buffers"></add>
-        <add name="sized str entries " type="SizedStringEntry" arr1="#ARG#\Num Files"></add>
-        <add name="fragments " type="Fragment" arr1="#ARG#\Num Fragments"></add>
-        <add name="set header " type="SetHeader" ></add>
-    </compound>
-
 
     <compound name="DirEntry" >
         Description of one directory in the archive

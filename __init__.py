@@ -163,6 +163,7 @@ class XmlParser:
         tree = ET.parse(xml_file)
         root = tree.getroot()
         self.generate_module_paths(root)
+        self.copy_src_to_generated()
 
         for child in root:
             try:
@@ -189,7 +190,6 @@ class XmlParser:
             except Exception as err:
                 logging.error(err)
         logging.info(self.storage_types)
-        self.copy_src_to_generated()
 
     # the following constructs do not create classes
     def read_token(self, token):
@@ -258,11 +258,27 @@ class XmlParser:
         # filter comment str
         struct.text = self.clean_comment_str(struct.text, indent="")
 
+    def get_code_from_src(self, cls_name):
+        cwd = os.getcwd()
+        src_dir = os.path.join(cwd, "source")
+        py_name = f"{cls_name.lower()}.py"
+
+        for root, dirs, files in os.walk(src_dir):
+            for name in files:
+                if self.format_name in root and py_name == name.lower():
+                    src_path = os.path.join(root, name)
+                    print("found source", src_path)
+                    with open(src_path, "r") as f:
+                        return f.read()
+        return ""
+
     def read_struct(self, struct):
         """Create a struct class"""
         self.replace_tokens(struct)
         self.apply_conventions(struct)
         class_name = struct.attrib.get("name")
+        # grab the source code, if it exists
+        src_code = self.get_code_from_src(class_name)
         class_basename = struct.attrib.get("inherit")
         class_debug_str = struct.text
         out_file = self.get_out_path(class_name)
@@ -282,6 +298,13 @@ class XmlParser:
 
         # write to python file
         with open(out_file, "w") as f:
+            if src_code:
+                sta = "# START_GLOBALS"
+                end = "# END_GLOBALS"
+                start_content = src_code.find(sta)
+                end_content = src_code.find(end)
+                if start_content > -1:
+                    f.write(src_code[start_content+len(sta):end_content])
             imports.write(f)
 
             inheritance = f"({class_basename})" if class_basename else ""
@@ -337,16 +360,19 @@ class XmlParser:
                 #     if default.tag != "default":
                 #         raise AttributeError("struct children's children must be 'default' tag")
 
-            f.write(f"\n\n\tdef __init__(self, arg=None, template=None):")
-            # classes that this class inherits from have to be read first
-            if class_basename:
-                f.write(f"\n\t\tsuper().__init__(arg, template)")
-            f.write(f"\n\t\tself.arg = arg")
-            f.write(f"\n\t\tself.template = template")
+            if "def __init__" not in src_code:
+                f.write(f"\n\n\tdef __init__(self, arg=None, template=None):")
+                # classes that this class inherits from have to be read first
+                if class_basename:
+                    f.write(f"\n\t\tsuper().__init__(arg, template)")
+                f.write(f"\n\t\tself.arg = arg")
+                f.write(f"\n\t\tself.template = template")
 
             # write the load() method
             for method_type in ("read", "write"):
                 # check all fields/members in this class and write them as fields
+                if f"def {method_type}(" in src_code:
+                    continue
                 f.write(f"\n\n\tdef {method_type}(self, stream):")
                 last_condition = None
                 # classes that this class inherits from have to be read first
@@ -398,17 +424,27 @@ class XmlParser:
                             template_str = ""
                         arr1 = field.attrib.get("arr1")
                         arr2 = field.attrib.get("arr2")
+                        arg = field.attrib.get("arg")
+                        if arg:
+                            arg = Expression(arg)
 
-                        f.write(f"{indent}{self.method_for_type(field_type, mode=method_type, attr=f'self.{field_name}', arr1=arr1)}")
+                        f.write(f"{indent}{self.method_for_type(field_type, mode=method_type, attr=f'self.{field_name}', arr1=arr1, arg=arg)}")
 
-            f.write(f"\n\n\tdef __repr__(self):")
-            f.write(f"\n\t\ts = '{class_name}'")
-            for field in struct:
-                if field.tag in FIELD_TYPES:
-                    field_name = field.attrib["name"]
-                    f.write(f"\n\t\ts += '\\n{field_name} ' + self.{field_name}.__repr__()")
-            f.write(f"\n\t\ts += '\\n'")
-            f.write(f"\n\t\treturn s")
+            if "def __repr__(" not in src_code:
+                f.write(f"\n\n\tdef __repr__(self):")
+                f.write(f"\n\t\ts = '{class_name}'")
+                for field in struct:
+                    if field.tag in FIELD_TYPES:
+                        field_name = field.attrib["name"]
+                        f.write(f"\n\t\ts += '\\n\t* {field_name} = ' + self.{field_name}.__repr__()")
+                f.write(f"\n\t\ts += '\\n'")
+                f.write(f"\n\t\treturn s")
+
+            if src_code:
+                sta = "# START_CLASS"
+                start_content = src_code.find(sta)
+                if start_content > -1:
+                    f.write(src_code[start_content+len(sta):])
 
 
     def collect_types(self, imports, struct):
@@ -431,7 +467,10 @@ class XmlParser:
             else:
                 f.write(f"import {class_import}\n")
 
-    def method_for_type(self, dtype: str, mode="read", attr="self.dummy", arr1=None):
+    def method_for_type(self, dtype: str, mode="read", attr="self.dummy", arr1=None, arg=None):
+        args = ""
+        if arg:
+            args = f", ({arg},)"
         # template or custom type
         if "template" in dtype.lower() or self.tag_dict[dtype.lower()] != "basic":
             io_func = f"{mode}_type"
@@ -441,13 +480,13 @@ class XmlParser:
             dtype = ""
         if not arr1:
             if mode == "read":
-                return f"{attr} = stream.{io_func}({dtype})"
+                return f"{attr} = stream.{io_func}({dtype}{args})"
             elif mode == "write":
                 return f"stream.{io_func}({attr})"
         else:
             arr1 = Expression(arr1)
             if mode == "read":
-                return f"{attr} = [stream.{io_func}({dtype}) for _ in range({arr1})]"
+                return f"{attr} = [stream.{io_func}({dtype}{args}) for _ in range({arr1})]"
             elif mode == "write":
                 return f"for item in {attr}: stream.{io_func}(item)"
 
