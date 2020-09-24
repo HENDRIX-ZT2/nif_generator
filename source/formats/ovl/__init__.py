@@ -708,11 +708,11 @@ class OvlFile(Header, IoFile):
 									lod_i) in other_sizedstr.name:
 								sized_str_entry.data_entry.buffers.extend(other_sizedstr.data_entry.buffers)
 
-		# # postprocessing of data buffers
-		# for archive in self.archives:
-		# 	for data_entry in archive.data_entries:
-		# 		# just sort buffers by their index value
-		# 		data_entry.update_buffers()
+		# postprocessing of data buffers
+		for archive in self.ovs_files:
+			for data_entry in archive.data_entries:
+				# just sort buffers by their index value
+				data_entry.update_buffers()
 
 		print(time.time() - start_time)
 
