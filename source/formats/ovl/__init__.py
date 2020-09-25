@@ -3,6 +3,7 @@ import itertools
 import struct
 import io
 import time
+import zlib
 
 from generated.formats.ovl.compound.Header import Header
 from generated.formats.ovl.compound.OvsHeader import OvsHeader
@@ -732,6 +733,68 @@ class OvlFile(Header, IoFile):
 
 		print(time.time() - start_time)
 
+	def save(self, filepath, ):
+		"""Write a dds file."""
+
+		print("Writing OVL")
+
+		exp_dir = os.path.dirname(filepath)
+		ovs_dict = {}
+		# # compress data stream
+		# for i, (archive_entry, archive) in enumerate(zip(self.archives, self.ovs_files)):
+		# 	# write archive into bytes IO stream
+		# 	temp_archive_writer = io.BytesIO()
+		# 	archive.write_archive(temp_archive_writer)
+		# 	# compress data
+		# 	uncompressed_bytes = temp_archive_writer.getvalue()
+		# 	compressed = zlib.compress(uncompressed_bytes)
+		# 	archive_entry.uncompressed_size = len(uncompressed_bytes)
+		# 	archive_entry.compressed_size = len(compressed)
+		# 	if i == 0:
+		# 		ovl_compressed = compressed
+		# 		archive_entry.read_start = 0
+		# 	else:
+		# 		exp_path = os.path.join(exp_dir, os.path.basename(archive_entry.ovs_path))
+		# 		# gotta keep them open because more than one archive can live in one ovs file eg PZ inspector
+		# 		if exp_path not in ovs_dict:
+		# 			ovs_dict[exp_path] = open(exp_path, 'wb')
+		#
+		# 		# todo: account for OVS offsets specified in archive_entry
+		# 		# todo: footer bytes in OVS?
+		# 		ovs_stream = ovs_dict[exp_path]
+		#
+		# 		archive_entry.read_start = ovs_stream.tell()
+		# 		ovs_stream.write(compressed)
+
+		print("Updating AUX sizes in OVL")
+		for aux in self.aux_entries:
+			name = self.files[aux.file_index].name
+			if aux.extension_index != 0:
+				bnkpath = f"{self.file_no_ext}_{name}_bnk_s.aux"
+			else:
+				bnkpath = f"{self.file_no_ext}_{name}_bnk_b.aux"
+
+			# grab and update size
+			if os.path.isfile(bnkpath):
+				aux.size = os.path.getsize(bnkpath)
+				# print(aux.size)
+
+		# first header
+		eof = super().write(filepath)
+		# write zlib block
+		# ovl_stream.write(ovl_compressed)
+
+		# archive_entry = self.header.archives[0]
+		# old_size = int(archive_entry.compressed_size)
+		# add size of zlib header
+		# new_size = # + 2
+		# print("old size:",old_size)
+		# print("new size:",new_size)
+		# print("zlib magic",self.zlib_header)
+
+		# we don't use context manager so gotta close them
+		for ovs_file in ovs_dict.values():
+			ovs_file.close()
 
 if __name__ == "__main__":
 	bnk = OvlFile()
