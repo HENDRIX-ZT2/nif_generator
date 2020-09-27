@@ -37,7 +37,7 @@ class OvsFile(OvsHeader, ZipFile):
         self.user_version = self.ovl.user_version
         self._byte_order = "<"
 
-    def unzip(self, filepath, start, compressed_size=0):
+    def unzip(self, filepath, start, skip, compressed_size=0):
         save_temp_dat = f"{filepath}_{self.arg.name}.dat" if "write_dat" in self.ovl.commands else ""
         with self.unzipper(filepath, start, compressed_size, save_temp_dat=save_temp_dat) as stream:
             print("reading from unzipped ovs")
@@ -112,7 +112,7 @@ class OvsFile(OvsHeader, ZipFile):
                                                                                              self.arg.set_data_size))
 
             # another integrity check
-            if self.calc_uncompressed_size() != self.arg.uncompressed_size:
+            if self.user_version != 8212 and self.calc_uncompressed_size() != self.arg.uncompressed_size:
                 raise AttributeError("Archive.uncompressed_size ({}) does not match calculated size ({})".format(
                     self.arg.uncompressed_size, self.calc_uncompressed_size()))
 
@@ -361,9 +361,16 @@ class OvsFile(OvsHeader, ZipFile):
                # "motiongraphvars": ( (4,4), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), ),
                # "hier": ( (4,6) for x in range(19) ),
                "spl": 1,
-               "lua": 1,
+               "lua": 2,
                "assetpkg": 1,
                "userinterfaceicondata": 2,
+			   "renderparameters": 1, #temp
+			   "renderparametercurves": 1, #temp
+			   "animalresearchunlocksettings": 1, #temp
+			   "mechanicresearchsettings": 1, #temp
+			   "pathextrusion": 1,#temp
+			   "pathmaterial": 1, #temp
+			   "pathresource": 1 #temp
                # "world": will be a variable length one with a 4,4; 4,6; then another variable length 4,6 set : set world before assetpkg in order
                }
         ss_max = len(sorted_sized_str_entries)
@@ -376,6 +383,10 @@ class OvsFile(OvsHeader, ZipFile):
                 frags = self.header_entries[hi].fragments
             else:
                 frags = address_0_fragments
+			if sized_str_entry.ext == "ms2" and self.user_version == 8212:
+				sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
+			elif sized_str_entry.ext == "tex" and self.user_version == 8212:
+				sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
             if sized_str_entry.ext in dic:
 
                 t = dic[sized_str_entry.ext]
@@ -396,7 +407,7 @@ class OvsFile(OvsHeader, ZipFile):
         # assign the mdl2 frags to their sized str entry
         for set_entry in self.set_header.sets:
             set_sized_str_entry = set_entry.entry
-            if set_sized_str_entry.ext == "ms2":
+            if set_sized_str_entry.ext == "ms2"  and self.user_version != 8212:
                 f_1 = set_sized_str_entry.fragments[1]
                 print("F-1:", f_1)
                 self.write_frag_log()
@@ -567,15 +578,15 @@ class OvsFile(OvsHeader, ZipFile):
                 e = "UNKNOWN"
         # PC Style
         elif self.is_pc():
-            # print("PZ ids",entry.file_hash, entry.ext_hash)
-            try:
-                n = self.ovl.name_list[entry.file_hash]
-            except:
-                n = "NONAME"
-            try:
-                e = self.ovl.name_hashdict[entry.ext_hash]
-            except:
-                e = "UNKNOWN"
+			# print("PC ids",entry.file_hash, entry.ext_hash)
+			try:
+				n = self.ovl.files[entry.file_hash].name#self.header.name_list[entry.file_hash]
+			except:
+				n = "NONAME"
+			try:
+				e = self.ovl.mimes[self.ovl.files[entry.file_hash].extension].ext
+			except:
+				e = "UNKNOWN"
         return n + "." + e
 
     def calc_uncompressed_size(self, ):
@@ -772,7 +783,9 @@ class OvlFile(Header, IoFile):
             archive_entry.name = self.archive_names.get_str_at(archive_entry.offset)
             self.print_and_callback(f"Reading archive {archive_entry.name}")
             # skip archives that are empty
-            if archive_entry.compressed_size == 0:
+			if archive_entry.compressed_size == 0 and self.flag_2 == 8212:
+				print("archive is not compressed")
+            elif archive_entry.compressed_size == 0:
                 print("archive is empty")
                 continue
             # those point to external ovs archives
@@ -795,7 +808,7 @@ class OvlFile(Header, IoFile):
                 read_start = eof
                 archive_entry.ovs_path = self.filepath
             archive = OvsFile(self, archive_entry, archive_index)
-            archive.unzip(archive_entry.ovs_path, read_start, archive_entry.compressed_size)
+            archive.unzip(archive_entry.ovs_path, read_start, self.flag_2, archive_entry.compressed_size)
             self.ovs_files.append(archive)
 
         # find texstream buffers
