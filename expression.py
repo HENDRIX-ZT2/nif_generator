@@ -188,11 +188,11 @@ class Expression(object):
         if isinstance(self._right, Expression):
             right = f"({right})"
         op = self._op
-        for k, v in (("&&", "and"), ("||", "or")):
+        for k, v in (("&&", "and"), ("||", "or"), ("!", "not")):
             op = op.replace(k, v)
         if op == "/":
             return f"int({left} {op} {right})"
-        return f"{left} {op} {right}"
+        return f"{left} {op} {right}".strip()
 
     @classmethod
     def _parse(cls, expr_str, name_filter=None):

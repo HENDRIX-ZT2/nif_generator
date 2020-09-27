@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 import os, filters
 from distutils.dir_util import copy_tree
 from typing import Dict, List
-from jinja2 import Environment, PackageLoader
+# from jinja2 import Environment, PackageLoader
 from xml.etree import ElementTree
 from html import unescape
 
@@ -19,17 +19,17 @@ from expression import Expression, Version
 
 logging.basicConfig(level=logging.DEBUG)
 
-env = Environment(
-    loader=PackageLoader('__init__', 'templates'),
-    keep_trailing_newline=True,
-)
-
-env.filters["bitflag"] = filters.bitflag
-env.filters["escape_backslashes"] = filters.escape_backslashes
-env.filters["hex_string"] = filters.hex_string
-env.filters["enum_name"] = filters.enum_name
-env.filters["field_name"] = filters.field_name
-env.filters["to_basic_type"] = filters.to_basic_type
+# env = Environment(
+#     loader=PackageLoader('__init__', 'templates'),
+#     keep_trailing_newline=True,
+# )
+#
+# env.filters["bitflag"] = filters.bitflag
+# env.filters["escape_backslashes"] = filters.escape_backslashes
+# env.filters["hex_string"] = filters.hex_string
+# env.filters["enum_name"] = filters.enum_name
+# env.filters["field_name"] = filters.field_name
+# env.filters["to_basic_type"] = filters.to_basic_type
 
 basics: List[str] = []
 
@@ -173,14 +173,14 @@ class XmlParser:
                     self.read_struct(child)
                 # elif child.tag in self.bitstruct_types:
                 #     self.read_bitstruct(child)
-                elif child.tag == "basic":
-                    self.write_basic(child)
-                elif child.tag == "enum":
-                    self.write_enum(child)
+                # elif child.tag == "basic":
+                #     self.write_basic(child)
+                # elif child.tag == "enum":
+                #     self.write_enum(child)
                 elif child.tag == "bitfield":
                     self.write_bitfield(child)
-                elif child.tag == "bitflags":
-                    self.write_bitflags(child)
+                # elif child.tag == "bitflags":
+                #     self.write_bitflags(child)
                 # elif child.tag == "module":
                 #     self.read_module(child)
                 # elif child.tag == "version":
