@@ -587,7 +587,8 @@ class OvsFile(OvsHeader, ZipFile):
         check_data_size_2 = 0
         for data_entry in self.data_entries:
             check_data_size_1 += data_entry.size_1
-            check_data_size_2 += data_entry.size_2
+            if hasattr(data_entry, "size_2"):
+                check_data_size_2 += data_entry.size_2
         return self.header_size + self.calc_header_data_size() + check_data_size_1 + check_data_size_2
 
     def calc_header_data_size(self, ):
