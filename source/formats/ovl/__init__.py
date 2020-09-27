@@ -383,20 +383,19 @@ class OvsFile(OvsHeader, ZipFile):
                 frags = self.header_entries[hi].fragments
             else:
                 frags = address_0_fragments
-			if sized_str_entry.ext == "ms2" and self.user_version == 8212:
-				sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
-			elif sized_str_entry.ext == "tex" and self.user_version == 8212:
-				sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
-            if sized_str_entry.ext in dic:
+            if sized_str_entry.ext == "ms2" and self.user_version == 8212:
+                sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
+            elif sized_str_entry.ext == "tex" and self.user_version == 8212:
+                sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
+            elif sized_str_entry.ext in dic:
 
                 t = dic[sized_str_entry.ext]
                 # get and set fragments
                 sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, t)
 
             elif sized_str_entry.ext == "fgm":
-                sized_str_entry.fragments = self.get_frag_after_terminator(frags,
-                                                                           sized_str_entry.pointers[0].address)
-
+                sized_str_entry.fragments = self.get_frag_after_terminator(frags, sized_str_entry.pointers[0].address)
+				
             elif sized_str_entry.ext == "materialcollection":
                 self.collect_matcol(sized_str_entry)
         # print("sizedstr",sized_str_entry.pointers[0].header_index)
