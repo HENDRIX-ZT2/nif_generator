@@ -274,6 +274,7 @@
 	
 	<compound name="PcModel" >
 		<add name="lod infos" type="LodInfo" arr1="#ARG#\model info\lod count" ></add>
+		<add name="materials 1" type="Material1" arr1="#ARG#\model info\mat1 count" ></add>
     </compound>
 
 	<compound name="onefiftytwo" >
