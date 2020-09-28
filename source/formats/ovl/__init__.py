@@ -86,12 +86,12 @@ class OvsFile(OvsHeader, ZipFile):
                 fragment.done = False
                 fragment.lod = False
                 fragment.name = None
-            print(self.ovl)
-            print(self)
+            # print(self.ovl)
+            # print(self)
             set_data_offset = stream.tell()
             print("Set header address", set_data_offset)
             self.set_header = stream.read_type(SetHeader)
-            print(self.set_header)
+            # print(self.set_header)
             if not (self.set_header.sig_a == 1065336831 and self.set_header.sig_b == 16909320):
                 raise AttributeError("Set header signature check failed!")
 
@@ -104,22 +104,20 @@ class OvsFile(OvsHeader, ZipFile):
                 try:
                     asset_entry.entry = self.sized_str_entries[asset_entry.file_index]
                 except:
-                    print("ERROR: could not find a sizedstr entry for asset", asset_entry, len(self.sized_str_entries))
+                    raise IndexError(f"Could not find a sizedstr entry for asset {asset_entry} in {len(self.sized_str_entries)}")
 
-            print(self.set_header)
             self.map_assets()
 
             # size check again
             self.header_size = stream.tell()
             set_data_size = self.header_size - set_data_offset
             if set_data_size != self.arg.set_data_size:
-                raise AttributeError("Set data size incorrect (got {}, expected {})!".format(set_data_size,
-                                                                                             self.arg.set_data_size))
+                raise AttributeError(f"Set data size incorrect (got {set_data_size}, expected {self.arg.set_data_size})!")
 
             # another integrity check
             if not self.is_pc() and self.calc_uncompressed_size() != self.arg.uncompressed_size:
-                raise AttributeError("Archive.uncompressed_size ({}) does not match calculated size ({})".format(
-                    self.arg.uncompressed_size, self.calc_uncompressed_size()))
+                raise AttributeError(f"Archive.uncompressed_size ({self.arg.uncompressed_size}) "
+                                     f"does not match calculated size ({self.calc_uncompressed_size})")
 
             # go back to header offset
             stream.seek(self.header_size)
@@ -136,8 +134,8 @@ class OvsFile(OvsHeader, ZipFile):
             self.map_frags()
             self.map_buffers(stream)
 
-            # if "write_frag_log" in self.ovl.commands:
-            self.write_frag_log()
+            if "write_frag_log" in self.ovl.commands:
+                self.write_frag_log()
             
     def calc_pointer_addresses(self):
         print("Calculating pointer addresses")
