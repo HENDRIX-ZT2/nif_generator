@@ -112,7 +112,7 @@ class OvsFile(OvsHeader, ZipFile):
                                                                                              self.arg.set_data_size))
 
             # another integrity check
-            if self.user_version != 8212 and self.calc_uncompressed_size() != self.arg.uncompressed_size:
+            if not self.is_pc() and self.calc_uncompressed_size() != self.arg.uncompressed_size:
                 raise AttributeError("Archive.uncompressed_size ({}) does not match calculated size ({})".format(
                     self.arg.uncompressed_size, self.calc_uncompressed_size()))
 
@@ -259,9 +259,9 @@ class OvsFile(OvsHeader, ZipFile):
         # ss_entry.tex_frags = []
         # input_frags = self.frags_for_pointer(ss_entry.tex_pointer.pointers[1])
         # for t in range(tex_count):
-        # 	ss_entry.tex_frags += self.get_frag_after(input_frags, ((4,6),(4,6),(4,6)), ss_entry.tex_pointer.pointers[1].address)
+        #     ss_entry.tex_frags += self.get_frag_after(input_frags, ((4,6),(4,6),(4,6)), ss_entry.tex_pointer.pointers[1].address)
         # for tex in ss_entry.tex_frags:
-        # 	print(tex.pointers[1].data)
+        #     print(tex.pointers[1].data)
         else:
             ss_entry.tex_pointer = None
         # material pointer frag
@@ -364,13 +364,13 @@ class OvsFile(OvsHeader, ZipFile):
                "lua": 2,
                "assetpkg": 1,
                "userinterfaceicondata": 2,
-			   "renderparameters": 1, #temp
-			   "renderparametercurves": 1, #temp
-			   "animalresearchunlocksettings": 1, #temp
-			   "mechanicresearchsettings": 1, #temp
-			   "pathextrusion": 1,#temp
-			   "pathmaterial": 1, #temp
-			   "pathresource": 1 #temp
+               "renderparameters": 1, #temp
+               "renderparametercurves": 1, #temp
+               "animalresearchunlocksettings": 1, #temp
+               "mechanicresearchsettings": 1, #temp
+               "pathextrusion": 1,#temp
+               "pathmaterial": 1, #temp
+               "pathresource": 1 #temp
                # "world": will be a variable length one with a 4,4; 4,6; then another variable length 4,6 set : set world before assetpkg in order
                }
         ss_max = len(sorted_sized_str_entries)
@@ -383,9 +383,9 @@ class OvsFile(OvsHeader, ZipFile):
                 frags = self.header_entries[hi].fragments
             else:
                 frags = address_0_fragments
-            if sized_str_entry.ext == "ms2" and self.user_version == 8212:
+            if sized_str_entry.ext == "ms2" and self.is_pc():
                 sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
-            elif sized_str_entry.ext == "tex" and self.user_version == 8212:
+            elif sized_str_entry.ext == "tex" and self.is_pc():
                 sized_str_entry.fragments = self.get_frags_after_count(frags, sized_str_entry.pointers[0].address, 1)
             elif sized_str_entry.ext in dic:
 
@@ -395,18 +395,18 @@ class OvsFile(OvsHeader, ZipFile):
 
             elif sized_str_entry.ext == "fgm":
                 sized_str_entry.fragments = self.get_frag_after_terminator(frags, sized_str_entry.pointers[0].address)
-				
+                
             elif sized_str_entry.ext == "materialcollection":
                 self.collect_matcol(sized_str_entry)
         # print("sizedstr",sized_str_entry.pointers[0].header_index)
         # print("frags",tuple((f.pointers[0].header_index, f.pointers[1].header_index) for f in sized_str_entry.fragments))
         # for f in sized_str_entry.fragments:
-        # 	assert(f.pointers[0].header_index == sized_str_entry.pointers[0].header_index)
+        #     assert(f.pointers[0].header_index == sized_str_entry.pointers[0].header_index)
         # second pass: collect model fragments
         # assign the mdl2 frags to their sized str entry
         for set_entry in self.set_header.sets:
             set_sized_str_entry = set_entry.entry
-            if set_sized_str_entry.ext == "ms2"  and self.user_version != 8212:
+            if set_sized_str_entry.ext == "ms2"  and not self.is_pc():
                 f_1 = set_sized_str_entry.fragments[1]
                 print("F-1:", f_1)
                 self.write_frag_log()
@@ -535,7 +535,10 @@ class OvsFile(OvsHeader, ZipFile):
     def find_entry(self, l, src_entry):
         """ returns entry from list l whose file hash matches hash, or none"""
         if self.is_pc():
-            return l[src_entry.file_hash]
+            # try to find it
+            for entry in l:
+                if entry.file_hash == src_entry.file_hash:
+                    return entry
         else:
             # try to find it
             for entry in l:
@@ -577,15 +580,15 @@ class OvsFile(OvsHeader, ZipFile):
                 e = "UNKNOWN"
         # PC Style
         elif self.is_pc():
-			# print("PC ids",entry.file_hash, entry.ext_hash)
-			try:
-				n = self.ovl.files[entry.file_hash].name#self.header.name_list[entry.file_hash]
-			except:
-				n = "NONAME"
-			try:
-				e = self.ovl.mimes[self.ovl.files[entry.file_hash].extension].ext
-			except:
-				e = "UNKNOWN"
+        # print("PC ids",entry.file_hash, entry.ext_hash)
+            try:
+                n = self.ovl.files[entry.file_hash].name#self.header.name_list[entry.file_hash]
+            except:
+                n = "NONAME"
+            try:
+                e = self.ovl.mimes[self.ovl.files[entry.file_hash].extension].ext
+            except:
+                e = "UNKNOWN"
         return n + "." + e
 
     def calc_uncompressed_size(self, ):
@@ -782,8 +785,8 @@ class OvlFile(Header, IoFile):
             archive_entry.name = self.archive_names.get_str_at(archive_entry.offset)
             self.print_and_callback(f"Reading archive {archive_entry.name}")
             # skip archives that are empty
-			if archive_entry.compressed_size == 0 and self.flag_2 == 8212:
-				print("archive is not compressed")
+            if archive_entry.compressed_size == 0 and self.flag_2 == 8212:
+                print("archive is not compressed")
             elif archive_entry.compressed_size == 0:
                 print("archive is empty")
                 continue
