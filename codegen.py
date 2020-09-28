@@ -4,7 +4,6 @@ import re
 import types
 import os
 import sys
-from distutils.dir_util import copy_tree
 import collections
 import xml.etree.ElementTree as ET
 import os, filters
@@ -149,13 +148,6 @@ class XmlParser:
         self.path_dict["BasicBitfield"] = "bitfield"
         self.path_dict["BitfieldMember"] = "bitfield"
 
-    def copy_src_to_generated(self):
-        """copies the files from the source folder to the generated folder"""
-        cwd = os.getcwd()
-        src_dir = os.path.join(cwd, "source")
-        trg_dir = os.path.join(cwd, "generated")
-        copy_tree(src_dir, trg_dir)
-
     def load_xml(self, xml_file):
         """Loads an XML (can be filepath or open file) and does all parsing
         Goes over all children of the root node and calls the appropriate function depending on type of the child"""
@@ -163,13 +155,11 @@ class XmlParser:
         tree = ET.parse(xml_file)
         root = tree.getroot()
         self.generate_module_paths(root)
-        self.copy_src_to_generated()
 
         for child in root:
             try:
                 if child.tag in self.struct_types:
                     # StructWriter(child)
-                    # if child.attrib["name"] == "Header":
                     self.read_struct(child)
                 # elif child.tag in self.bitstruct_types:
                 #     self.read_bitstruct(child)
@@ -272,6 +262,21 @@ class XmlParser:
                         return f.read()
         return ""
 
+    def grab_src_snippet(self, src_code, start, end=""):
+        # print(src_code)
+        start_content = src_code.find(start)
+        if start_content > -1:
+            if end:
+                end_content = src_code.find(end)
+                if end_content > -1:
+                    snipp = src_code[start_content + len(start):end_content]
+                    # print("found start + end", len(snipp), start, end)
+                    return snipp
+            snipp = src_code[start_content + len(start):]
+            # print("found start", len(snipp), start, end)
+            return snipp
+        return ""
+
     def read_struct(self, struct):
         """Create a struct class"""
         self.replace_tokens(struct)
@@ -279,6 +284,8 @@ class XmlParser:
         class_name = struct.attrib.get("name")
         # grab the source code, if it exists
         src_code = self.get_code_from_src(class_name)
+        # print("class_name", class_name)
+        # print(src_code)
         class_basename = struct.attrib.get("inherit")
         class_debug_str = struct.text
         out_file = self.get_out_path(class_name)
@@ -298,13 +305,8 @@ class XmlParser:
 
         # write to python file
         with open(out_file, "w") as f:
-            if src_code:
-                sta = "# START_GLOBALS"
-                end = "# END_GLOBALS"
-                start_content = src_code.find(sta)
-                end_content = src_code.find(end)
-                if start_content > -1:
-                    f.write(src_code[start_content+len(sta):end_content])
+            f.write(self.grab_src_snippet(src_code, "# START_GLOBALS", "# END_GLOBALS"))
+
             imports.write(f)
 
             inheritance = f"({class_basename})" if class_basename else ""
@@ -367,6 +369,7 @@ class XmlParser:
                     f.write(f"\n\t\tsuper().__init__(arg, template)")
                 f.write(f"\n\t\tself.arg = arg")
                 f.write(f"\n\t\tself.template = template")
+                f.write(f"\n\t\tself.io_size = 0")
 
                 for field in struct:
                     if field.tag in FIELD_TYPES:
@@ -394,6 +397,7 @@ class XmlParser:
                 if f"def {method_type}(" in src_code:
                     continue
                 f.write(f"\n\n\tdef {method_type}(self, stream):")
+                f.write(f"\n\n\t\tio_start = stream.tell()")
                 last_condition = ""
                 # classes that this class inherits from have to be read first
                 if class_basename:
@@ -450,10 +454,14 @@ class XmlParser:
                             arg = Expression(arg)
 
                         f.write(f"{indent}{self.method_for_type(field_type, mode=method_type, attr=f'self.{field_name}', arr1=arr1, arg=arg)}")
+                        # store version related stuff on stream
+                        if "version" in field_name:
+                            f.write(f"{indent}stream.{field_name} = self.{field_name}")
+                f.write(f"\n\n\t\tself.io_size = stream.tell() - io_start")
 
             if "def __repr__(" not in src_code:
                 f.write(f"\n\n\tdef __repr__(self):")
-                f.write(f"\n\t\ts = '{class_name}'")
+                f.write(f"\n\t\ts = '{class_name} [Size: '+str(self.io_size)+']'")
                 for field in struct:
                     if field.tag in FIELD_TYPES:
                         field_name = field.attrib["name"]
@@ -461,11 +469,7 @@ class XmlParser:
                 f.write(f"\n\t\ts += '\\n'")
                 f.write(f"\n\t\treturn s")
 
-            if src_code:
-                sta = "# START_CLASS"
-                start_content = src_code.find(sta)
-                if start_content > -1:
-                    f.write(src_code[start_content+len(sta):])
+            f.write(self.grab_src_snippet(src_code, "# START_CLASS"))
 
 
     def collect_types(self, imports, struct):
@@ -666,11 +670,18 @@ class XmlParser:
         for xml_child in xml_struct:
             self.replace_tokens(xml_child)
 
+def copy_src_to_generated():
+    """copies the files from the source folder to the generated folder"""
+    cwd = os.getcwd()
+    src_dir = os.path.join(cwd, "source")
+    trg_dir = os.path.join(cwd, "generated")
+    copy_tree(src_dir, trg_dir)
 
 def generate_classes():
     logging.info("Starting class generation")
     cwd = os.getcwd()
     root_dir = os.path.join(cwd, "source\\formats")
+    copy_src_to_generated()
     for format_name in os.listdir(root_dir):
         dir_path = os.path.join(root_dir, format_name)
         if os.path.isdir(dir_path):

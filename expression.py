@@ -224,7 +224,9 @@ class Expression(object):
                 return convention.name_attribute(x)
         prefix = "self."
         # globals are stored on the stream
-        if "version" in expr_str.lower():
+        # it is only a global if the leftmost member has version in it
+        # ie. general_info.ms2_version is not a global
+        if "version" in expr_str.split(".")[0].lower():
             prefix = "stream."
         return prefix + ('.'.join(name_filter(comp) for comp in expr_str.split(".")))
 
