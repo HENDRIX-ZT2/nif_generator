@@ -368,13 +368,33 @@ class XmlParser:
                 f.write(f"\n\t\tself.arg = arg")
                 f.write(f"\n\t\tself.template = template")
 
+                for field in struct:
+                    if field.tag in FIELD_TYPES:
+                        field_name = field.attrib["name"]
+                        field_type = field.attrib["type"]
+                        field_default = field.attrib.get("default")
+                        if field_type.lower() in self.tag_dict:
+                            type_of_field_type = self.tag_dict[field_type.lower()]
+                            # write the field's default, if it exists
+                            if field_default:
+                                # we have to check if the default is an enum default value, in which case it has to be a member of that enum
+                                if type_of_field_type == "enum":
+                                    field_default = field_type + "." + field_default
+                            # no default, so guess one
+                            else:
+                                if type_of_field_type in ("compound", "niobject"):
+                                    field_default = f"{field_type}()"
+                        if not field_default:
+                            field_default = 0
+                        f.write(f"\n\t\tself.{field_name} = {field_default}")
+
             # write the load() method
             for method_type in ("read", "write"):
                 # check all fields/members in this class and write them as fields
                 if f"def {method_type}(" in src_code:
                     continue
                 f.write(f"\n\n\tdef {method_type}(self, stream):")
-                last_condition = None
+                last_condition = ""
                 # classes that this class inherits from have to be read first
                 if class_basename:
                     f.write(f"\n\t\tsuper().{method_type}(stream)")
@@ -412,10 +432,11 @@ class XmlParser:
                             # merge subsequent fields that have the same condition
                             if last_condition != new_condition:
                                 f.write(f"\n\t\t{new_condition}")
-                            last_condition = new_condition
                             indent = "\n\t\t\t"
                         else:
                             indent = "\n\t\t"
+                            new_condition = ""
+                        last_condition = new_condition
                         template = field.attrib.get("template")
                         if template:
                             template_str = f"template={template}"

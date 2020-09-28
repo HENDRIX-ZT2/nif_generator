@@ -41,6 +41,10 @@ class OvsFile(OvsHeader, ZipFile):
         save_temp_dat = f"{filepath}_{self.arg.name}.dat" if "write_dat" in self.ovl.commands else ""
         with self.unzipper(filepath, start, skip, compressed_size, save_temp_dat=save_temp_dat) as stream:
             print("reading from unzipped ovs")
+            stream.version = self.ovl.version
+            stream.user_version = self.ovl.user_version
+            # print("stream.version", stream.version)
+            # print("stream.user_version", stream.user_version)
             super().read(stream)
 
             # print(self.header_entries)
@@ -87,6 +91,7 @@ class OvsFile(OvsHeader, ZipFile):
             set_data_offset = stream.tell()
             print("Set header address", set_data_offset)
             self.set_header = stream.read_type(SetHeader)
+            print(self.set_header)
             if not (self.set_header.sig_a == 1065336831 and self.set_header.sig_b == 16909320):
                 raise AttributeError("Set header signature check failed!")
 
@@ -891,7 +896,7 @@ class OvlFile(Header, IoFile):
 
 if __name__ == "__main__":
     bnk = OvlFile()
-    # bnk.load("C:/Users/arnfi/Desktop/Coding/ovl/OVLs/Parrot.ovl")
+    bnk.load("C:/Users/arnfi/Desktop/Coding/ovl/OVLs/Parrot.ovl")
     # bnk.load("C:/Users/arnfi/Desktop/Coding/ovl/OVLs/Gharial_Male.ovl")
-    bnk.load("C:/Users/arnfi/Desktop/Coding/ovl/PC_Primitives_01.ovl")
+    # bnk.load("C:/Users/arnfi/Desktop/Coding/ovl/PC_Primitives_01.ovl")
 # print(bnk)

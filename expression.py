@@ -189,7 +189,9 @@ class Expression(object):
             right = f"({right})"
         op = self._op
         for k, v in (("&&", "and"), ("||", "or"), ("!", "not")):
-            op = op.replace(k, v)
+            if op.strip() == k:
+                op = v
+        # since we need it for arrays, round to int
         if op == "/":
             return f"int({left} {op} {right})"
         return f"{left} {op} {right}".strip()
