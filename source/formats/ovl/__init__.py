@@ -39,7 +39,7 @@ class OvsFile(OvsHeader, ZipFile):
 
     def unzip(self, filepath, start, skip, compressed_size=0):
         save_temp_dat = f"{filepath}_{self.arg.name}.dat" if "write_dat" in self.ovl.commands else ""
-        with self.unzipper(filepath, start, compressed_size, save_temp_dat=save_temp_dat) as stream:
+        with self.unzipper(filepath, start, skip, compressed_size, save_temp_dat=save_temp_dat) as stream:
             print("reading from unzipped ovs")
             super().read(stream)
 
@@ -133,7 +133,7 @@ class OvsFile(OvsHeader, ZipFile):
 
             # if "write_frag_log" in self.ovl.commands:
             self.write_frag_log()
-
+            
     def calc_pointer_addresses(self):
         print("Calculating pointer addresses")
         # store absolute read addresses from the start of file
@@ -810,7 +810,9 @@ class OvlFile(Header, IoFile):
                 read_start = eof
                 archive_entry.ovs_path = self.filepath
             archive = OvsFile(self, archive_entry, archive_index)
+
             archive.unzip(archive_entry.ovs_path, read_start, self.flag_2, archive_entry.compressed_size)
+
             self.ovs_files.append(archive)
 
         # find texstream buffers
