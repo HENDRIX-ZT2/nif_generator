@@ -462,10 +462,8 @@ class XmlParser:
             if "def __repr__(" not in src_code:
                 f.write(f"\n\n\tdef __repr__(self):")
                 f.write(f"\n\t\ts = '{class_name} [Size: '+str(self.io_size)+']'")
-                for field in struct:
-                    if field.tag in FIELD_TYPES:
-                        field_name = field.attrib["name"]
-                        f.write(f"\n\t\ts += '\\n\t* {field_name} = ' + self.{field_name}.__repr__()")
+                for field_name in field_unions_dict.keys():
+                    f.write(f"\n\t\ts += '\\n\t* {field_name} = ' + self.{field_name}.__repr__()")
                 f.write(f"\n\t\ts += '\\n'")
                 f.write(f"\n\t\treturn s")
 
