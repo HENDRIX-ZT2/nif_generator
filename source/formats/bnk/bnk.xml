@@ -135,8 +135,8 @@
         <add name="flag" type="byte" >?</add>
         <add name="zerosd" type="uint" >?</add>
         <add name="zerose" type="uint" >?</add>
-        <add name="extra" type="byte" arr1 ="length - 49" cond="(const d #NEQ# 0) #AND# ((length #SUB# 49) #GT# 0)">?</add>
-        <add name="extra" type="byte" arr1 ="length - 44" cond="(const d #EQ# 0) #AND# ((length #SUB# 44) #GT# 0)">?</add>
+        <add name="extra" type="byte" arr1="length - 49" cond="(const d #NEQ# 0) #AND# ((length #SUB# 49) #GT# 0)">?</add>
+        <add name="extra" type="byte" arr1="length - 44" cond="(const d #EQ# 0) #AND# ((length #SUB# 44) #GT# 0)">?</add>
     </compound>
 
     <compound name="TypeOther">
