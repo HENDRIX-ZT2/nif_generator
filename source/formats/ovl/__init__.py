@@ -1173,8 +1173,6 @@ class OvlFile(Header, IoFile):
 		for i, (archive_entry, archive) in enumerate(zip(self.archives, self.ovs_files)):
 			# write archive into bytes IO stream
 			archive_entry.uncompressed_size, archive_entry.compressed_size, compressed = archive.zipper()
-			print("archive_entry.uncompressed_size, archive_entry.compressed_size", archive_entry.uncompressed_size,
-				  archive_entry.compressed_size)
 			if i == 0:
 				ovl_compressed = compressed
 				archive_entry.read_start = 0
