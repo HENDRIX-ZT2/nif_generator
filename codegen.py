@@ -1,17 +1,17 @@
 import logging
 import xml.etree.ElementTree as ET
-import os, filters
+import os
 from distutils.dir_util import copy_tree
-from typing import Dict, List
 from xml.etree import ElementTree
 from html import unescape
 import traceback
 
-import naming_conventions as convention
-from expression import Expression, Version
+from codegen import naming_conventions as convention
+from codegen.expression import Expression
 from codegen.Compound import Compound
 from codegen.Enum import Enum
 from codegen.Bitfield import Bitfield
+from codegen.naming_conventions import clean_comment_str
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -137,21 +137,13 @@ class XmlParser:
         self.update_gamesdict(self.cls.games, version.text)
         self.version_string = None
 
-    def clean_comment_str(self, comment_str="", indent=""):
-        """Reformats an XML comment string into multi-line a python style comment block"""
-        if comment_str is None:
-            return ""
-        if not comment_str.strip():
-            return ""
-        lines = [f"\n{indent}# {line.strip()}" for line in comment_str.strip().split("\n")]
-        return "\n" + "".join(lines)
-
-    def get_names(self, struct, attrs):
+    @staticmethod
+    def get_names(struct):
         # struct types can be organized in a hierarchy
         # if inherit attribute is defined, look for corresponding base block
-        class_name = convention.name_class(attrs.get("name"))
-        class_basename = attrs.get("inherit")
-        class_debug_str = self.clean_comment_str(struct.text, indent="\t")
+        class_name = convention.name_class(struct.attrib.get("name"))
+        class_basename = struct.attrib.get("inherit")
+        class_debug_str = clean_comment_str(struct.text, indent="\t")
         if class_basename:
             # avoid turning None into 'None' if class doesn't inherit
             class_basename = convention.name_class(class_basename)
@@ -167,7 +159,8 @@ class XmlParser:
             os.makedirs(out_dir)
         return out_file
 
-    def apply_convention(self, struct, func, params):
+    @staticmethod
+    def apply_convention(struct, func, params):
         for k in params:
             if struct.attrib.get(k):
                 struct.attrib[k] = func(struct.attrib[k])
@@ -182,7 +175,7 @@ class XmlParser:
                 self.apply_convention(field, convention.name_class, ("type",))
 
         # filter comment str
-        struct.text = self.clean_comment_str(struct.text, indent="")
+        struct.text = clean_comment_str(struct.text, indent="\t", class_comment='"""')
 
     def collect_types(self, imports, struct):
         """Iterate over all fields in struct and collect type references"""
@@ -243,7 +236,7 @@ class XmlParser:
         write_file(out_file, env.get_template('bitflags.py.jinja').render(bitflags=element))
 
     def write_bitfield(self, element: ElementTree.Element):
-        class_name, class_basename, class_debug_str = self.get_names(element, element.attrib)
+        class_name, class_basename, class_debug_str = self.get_names(element)
 
         out_file = self.get_out_path(class_name)
         storage = element.attrib["storage"]

@@ -1,6 +1,6 @@
 import os
 from .Imports import Imports
-
+from . import naming_conventions as convention
 
 class BaseClass:
 

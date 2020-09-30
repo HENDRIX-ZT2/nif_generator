@@ -1,7 +1,4 @@
-import collections
 from .BaseClass import BaseClass
-import naming_conventions as convention
-from expression import Expression, Version
 
 FIELD_TYPES = ("add", "field")
 VER = "stream.version"
@@ -26,3 +23,4 @@ class Enum(BaseClass):
 				f.write(f"\n\t{option.attrib['name']} = {option.attrib['value']}")
 			print(storage)
 			self.parser.write_storage_io_methods(f, storage, attr='self._value_')
+			f.write(f"\n")

@@ -17,6 +17,7 @@ _RE_NAME_LC = re.compile('[a-z]')
 _RE_NAME_UC = re.compile('[A-Z]')
 """Matches an upper case character."""
 
+
 def name_parts(name):
     """Intelligently split a name into parts:
     * first, split at non-alphanumeric characters
@@ -86,6 +87,7 @@ def name_attribute(name):
     """
     return '_'.join(part.lower() for part in name_parts(name))
 
+
 def name_class(name):
     """Converts a class name, as in the xsd file, into a name usable
     by python.
@@ -98,3 +100,16 @@ def name_class(name):
     if name == "self.template":
         return name
     return ''.join(part.capitalize() for part in name_parts(name))
+
+
+def clean_comment_str(comment_str="", indent="", class_comment=""):
+    """Reformats an XML comment string into multi-line a python style comment block"""
+    if comment_str is None:
+        return ""
+    if not comment_str.strip():
+        return ""
+    if class_comment:
+        lines = [f"\n{indent}{class_comment}",] + [f"\n{indent}{line.strip()}" for line in comment_str.strip().split("\n")] + [f"\n{indent}{class_comment}",]
+    else:
+        lines = [f"\n{indent}# {line.strip()}" for line in comment_str.strip().split("\n")]
+    return "\n" + "".join(lines)

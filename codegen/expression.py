@@ -1,8 +1,7 @@
 """Expression parser (for arr1, arr2, cond, and vercond xml attributes of
 <add> tag)."""
 
-import re
-import naming_conventions as convention
+from codegen import naming_conventions as convention
 
 
 class Version(object):

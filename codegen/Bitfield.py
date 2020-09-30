@@ -1,8 +1,5 @@
-import collections
 from .BaseClass import BaseClass
-import naming_conventions as convention
-
-from expression import Expression, Version
+from . import naming_conventions as convention
 
 FIELD_TYPES = ("add", "field")
 VER = "stream.version"
